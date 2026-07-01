@@ -41,12 +41,10 @@ import {
 import { PRODUCTOS } from "@/lib/config";
 import type { ProductoId } from "@/lib/types";
 import {
-  construirCSVEstadoCuenta,
   formatoSaldo,
   type EstadoCliente,
 } from "@/lib/domain/cuenta-corriente";
 import { resolverCliente, type AliasRef, type ClienteRef } from "@/lib/domain/clientes";
-import { imprimirEstadoCuenta } from "@/lib/pdf";
 import {
   aClienteRef,
   crearCliente,
@@ -100,6 +98,10 @@ function estadoDeSaldo(deuda: number): EstadoCliente {
 
 function descargarCSV(nombre: string, csv: string) {
   const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  descargarBlob(nombre, blob);
+}
+
+function descargarBlob(nombre: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -370,28 +372,40 @@ function DetalleCliente({
     return (detalle?.filas ?? []).filter((f) => f.fecha >= min && f.fecha <= max);
   }, [detalle, desde, hasta]);
 
-  function exportar() {
+  async function exportar(formato: "xlsx" | "pdf") {
     if (!detalle) return;
-    const csv = construirCSVEstadoCuenta(cliente.nombre, filasFiltradas, detalle.resumen);
-    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `estado-cuenta-${cliente.nombre}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function exportarPDF() {
-    if (!detalle) return;
-    const ok = imprimirEstadoCuenta({
-      nombreCliente: cliente.nombre,
-      filas: filasFiltradas,
-      resumen: detalle.resumen,
-      rango: { desde: desde || undefined, hasta: hasta || undefined },
-    });
-    if (!ok) {
-      toast.error("El navegador bloqueó la ventana. Permite las ventanas emergentes para generar el PDF.");
+    try {
+      const res = await fetch("/api/export-creditos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          formato,
+          cliente: cliente.nombre,
+          resumen: detalle.resumen,
+          rango: { desde: desde || undefined, hasta: hasta || undefined },
+          filas: filasFiltradas.map((f) => ({
+            fecha: f.fecha,
+            cliente: cliente.nombre,
+            producto: f.producto ? PRODUCTOS[f.producto] : "",
+            vale: f.vale ?? "",
+            precio: f.precio,
+            totalCredito: f.totalCredito,
+            pago: f.pago,
+            deudaPendiente: f.saldoAcumulado,
+          })),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || "No se pudo generar el archivo.");
+      }
+      const blob = await res.blob();
+      const fallback = `creditos-${cliente.nombre}.${formato}`;
+      const contentDisposition = res.headers.get("content-disposition") ?? "";
+      const match = contentDisposition.match(/filename="?([^"]+)"?/i);
+      descargarBlob(match?.[1] ?? fallback, blob);
+    } catch (e) {
+      toast.error((e as Error).message);
     }
   }
 
@@ -431,10 +445,10 @@ function DetalleCliente({
               onListo={onCambio}
             />
             <FusionarDialog cliente={cliente} clientes={clientes} onListo={onCambio} />
-            <Button variant="outline" size="sm" onClick={exportar} disabled={!detalle}>
-              <Download className="size-4" /> CSV
+            <Button variant="outline" size="sm" onClick={() => exportar("xlsx")} disabled={!detalle}>
+              <Download className="size-4" /> Excel
             </Button>
-            <Button variant="outline" size="sm" onClick={exportarPDF} disabled={!detalle}>
+            <Button variant="outline" size="sm" onClick={() => exportar("pdf")} disabled={!detalle}>
               <FileText className="size-4" /> PDF
             </Button>
           </div>
