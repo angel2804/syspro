@@ -21,6 +21,7 @@ import {
   resetPruebasCompleto,
   DIAS_BACKUP,
   fetchBackups,
+  fetchSesionesDesde,
   restaurarBackup,
   setLogoRemoto,
   setPreciosRemoto,
@@ -244,13 +245,29 @@ export default function AdminPage() {
   // Suscripción en vivo a los últimos 60 días operativos (turnos activos +
   // días recientes para reporte/export), vía Supabase Realtime.
   useEffect(() => {
+    if (!hydrated || !auth || !esStaff(auth.rol)) return;
     const corte = diaMenos(diaOperativoActual(), 60);
-    const unsub = subscribeSesiones(corte, (lista) => {
+    const aplicar = (lista: Sesion[]) => {
       setRemoteList(lista);
       setConectado(true);
+    };
+    const refetch = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      try {
+        aplicar(await fetchSesionesDesde(corte));
+      } catch {
+        setConectado(false);
+      }
+    };
+    const unsub = subscribeSesiones(corte, (lista) => {
+      aplicar(lista);
     });
-    return unsub;
-  }, []);
+    const poll = setInterval(refetch, 3000);
+    return () => {
+      clearInterval(poll);
+      unsub();
+    };
+  }, [hydrated, auth]);
 
   const remote = remoteList;
 

@@ -24,6 +24,7 @@ import type { Admin, Precios, Sesion } from "@/lib/types";
 //    borrados ni reescribe sesiones de otros.
 //  - escucha precios y trabajadores globales en vivo.
 export function SupabaseSync() {
+  const auth = useStore((s) => s.auth);
   const mergeRemoteSesiones = useStore((s) => s.mergeRemoteSesiones);
   const setPrecios = useStore((s) => s.setPrecios);
   const setTrabajadores = useStore((s) => s.setTrabajadores);
@@ -33,33 +34,33 @@ export function SupabaseSync() {
 
   // Precios globales en vivo (config/precios)
   useEffect(() => {
-    if (!supabaseHabilitado) return;
+    if (!supabaseHabilitado || !auth?.userId) return;
     return subscribeConfig<Precios>("precios", setPrecios);
-  }, [setPrecios]);
+  }, [auth?.userId, setPrecios]);
 
   // Lista de trabajadores en vivo (config/trabajadores)
   useEffect(() => {
-    if (!supabaseHabilitado) return;
+    if (!supabaseHabilitado || !auth?.userId) return;
     return subscribeConfig<{ nombres: string[] }>("trabajadores", (v) => {
       if (Array.isArray(v.nombres) && v.nombres.length) setTrabajadores(v.nombres);
     });
-  }, [setTrabajadores]);
+  }, [auth?.userId, setTrabajadores]);
 
   // Administradores en vivo (config/admins)
   useEffect(() => {
-    if (!supabaseHabilitado) return;
+    if (!supabaseHabilitado || !auth?.userId) return;
     return subscribeConfig<{ admins: Admin[] }>("admins", (v) => {
       if (Array.isArray(v.admins)) setAdmins(v.admins);
     });
-  }, [setAdmins]);
+  }, [auth?.userId, setAdmins]);
 
   // Logo de la empresa en vivo (config/logo)
   useEffect(() => {
-    if (!supabaseHabilitado) return;
+    if (!supabaseHabilitado || !auth?.userId) return;
     return subscribeConfig<{ dataUrl: string | null }>("logo", (v) => {
       setLogo(v.dataUrl ?? null);
     });
-  }, [setLogo]);
+  }, [auth?.userId, setLogo]);
 
   // Lista de clientes en vivo (config/clientes). La lista remota es la
   // AUTORITATIVA: se reemplaza la local por la remota. Así las eliminaciones
@@ -68,12 +69,12 @@ export function SupabaseSync() {
   // recién aprendidos en este dispositivo se suben enseguida (efecto de abajo)
   // y vuelven en la siguiente actualización remota.
   useEffect(() => {
-    if (!supabaseHabilitado) return;
+    if (!supabaseHabilitado || !auth?.userId) return;
     return subscribeConfig<{ nombres: string[] }>("clientes", (v) => {
       if (!Array.isArray(v.nombres)) return;
       setClientes(v.nombres);
     });
-  }, [setClientes]);
+  }, [auth?.userId, setClientes]);
 
   // Sube a Supabase SOLO los clientes nuevos que se aprenden localmente
   // (debounced y de forma ADITIVA). Antes subía la lista COMPLETA en cada
@@ -82,7 +83,7 @@ export function SupabaseSync() {
   // nombres que NO estaban antes; las eliminaciones las maneja el admin (su
   // escritura autoritativa) y nunca se pisan.
   useEffect(() => {
-    if (!supabaseHabilitado) return;
+    if (!supabaseHabilitado || !auth?.userId) return;
     let prev = useStore.getState().clientes;
     let buffer: string[] = [];
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -105,15 +106,15 @@ export function SupabaseSync() {
       if (timer) clearTimeout(timer);
       unsub();
     };
-  }, []);
+  }, [auth?.userId]);
 
   // Ventana reciente de sesiones en vivo (hoy y ayer) + guardado de la activa
   useEffect(() => {
-    if (!supabaseHabilitado) return;
+    if (!supabaseHabilitado || !auth?.userId) return;
     const cutoff = diaMenos(diaOperativoActual(), 1);
 
     let primera = true;
-    const unsub = subscribeSesiones(cutoff, (remotas: Sesion[]) => {
+    const aplicar = (remotas: Sesion[]) => {
       // Siempre se llama con el `cutoff`: así un reset de base de datos hecho
       // desde otro dispositivo también borra el caché local "zombie" de este
       // dispositivo en vez de quedar desactualizado.
@@ -123,10 +124,25 @@ export function SupabaseSync() {
         useStore.getState().setSync({ estado: "conectado" });
         toast.success("Conectado a Supabase", { duration: 2000 });
       }
-    });
+    };
 
-    return unsub;
-  }, [mergeRemoteSesiones]);
+    const refetch = async () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      try {
+        aplicar(await fetchSesionesDesde(cutoff));
+      } catch {
+        useStore.getState().setSync({ estado: "sinConexion" });
+      }
+    };
+
+    const unsub = subscribeSesiones(cutoff, aplicar);
+    const poll = setInterval(refetch, 3000);
+
+    return () => {
+      clearInterval(poll);
+      unsub();
+    };
+  }, [auth?.userId, mergeRemoteSesiones]);
 
   // Estado de conexión de red (offline/online) reflejado en el indicador.
   useEffect(() => {
@@ -144,7 +160,7 @@ export function SupabaseSync() {
 
   // Guardado automático: SOLO la sesión activa (currentSesionId), debounced.
   useEffect(() => {
-    if (!supabaseHabilitado) return;
+    if (!supabaseHabilitado || !auth?.userId) return;
     let ultimoJson = "";
     let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -185,7 +201,7 @@ export function SupabaseSync() {
       if (timer) clearTimeout(timer);
       unsub();
     };
-  }, []);
+  }, [auth?.userId]);
 
   return null;
 }
