@@ -100,6 +100,7 @@ export default function DashboardPage() {
   const logout = useStore((s) => s.logout);
   const precios = useStore((s) => s.precios);
   const clientes = useStore((s) => s.clientes);
+  const clientesDescuento = useStore((s) => s.clientesDescuento);
   const store = useStore();
 
   const hydrated = useHydrated();
@@ -219,10 +220,11 @@ export default function DashboardPage() {
   }
 
   // ---- Columnas compartidas (formulario inline + modal tabla) ----
-  const sugClientes = clientesOrdenados(clientes);
-  const cCredito = colsCredito(productoOptions, precio, sugClientes);
+  const sugClientesCredito = clientesOrdenados(clientes);
+  const sugClientesDescuento = clientesOrdenados(clientesDescuento);
+  const cCredito = colsCredito(productoOptions, precio, sugClientesCredito);
   const cPromo = colsPromo(productoOptions, precio);
-  const cDescuento = colsDescuento(productoOptions, precio, sugClientes);
+  const cDescuento = colsDescuento(productoOptions, precio, sugClientesDescuento);
   const cAdelanto = colsAdelanto();
   const cBalon = colsBalon(precios);
 

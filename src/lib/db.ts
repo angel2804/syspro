@@ -226,6 +226,8 @@ export const setTrabajadoresRemoto = (nombres: string[]) =>
 // clientes del admin (agregar/eliminar), que es la fuente de verdad.
 export const setClientesRemoto = (nombres: string[]) =>
   setConfig("clientes", { nombres });
+export const setClientesDescuentoRemoto = (nombres: string[]) =>
+  setConfig("clientes_descuento", { nombres });
 
 // Agrega nombres a la lista remota de forma ADITIVA (lee, mezcla, escribe).
 // Nunca pisa la lista completa, así un cliente que el admin eliminó NO se
@@ -238,6 +240,15 @@ export async function addClientesRemoto(nombres: string[]): Promise<void> {
   const merged = aprenderClientes(actual, nombres);
   if (merged === actual) return; // ninguno era nuevo
   await setConfig("clientes", { nombres: merged });
+}
+export async function addClientesDescuentoRemoto(nombres: string[]): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  const actual =
+    (await getConfig<{ nombres: string[] }>("clientes_descuento"))?.nombres ?? [];
+  const merged = aprenderClientes(actual, nombres);
+  if (merged === actual) return;
+  await setConfig("clientes_descuento", { nombres: merged });
 }
 // Administradores (nombre + contraseña), gestionados por el desarrollador.
 export const setAdminsRemoto = (admins: Admin[]) =>

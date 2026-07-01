@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
+  addClientesDescuentoRemoto,
   crearBackup,
   deleteBackup,
   deleteSesion,
@@ -25,6 +26,7 @@ import {
   restaurarBackup,
   setLogoRemoto,
   setPreciosRemoto,
+  setClientesDescuentoRemoto,
   setClientesRemoto,
   addClientesRemoto,
   setTrabajadoresRemoto,
@@ -32,6 +34,7 @@ import {
   upsertSesion,
   type Backup,
 } from "@/lib/db";
+import { sincronizarCreditosSesion } from "@/lib/data/creditos";
 import { clientesOrdenados } from "@/lib/clientes";
 import { entradaAutomatica, uid, useStore } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
@@ -169,8 +172,13 @@ export default function AdminPage() {
   const trabajadores = useStore((s) => s.trabajadores);
   const setTrabajadoresStore = useStore((s) => s.setTrabajadores);
   const aprenderClientesStore = useStore((s) => s.aprenderClientes);
+  const aprenderClientesDescuentoStore = useStore(
+    (s) => s.aprenderClientesDescuento
+  );
   const clientes = useStore((s) => s.clientes);
+  const clientesDescuento = useStore((s) => s.clientesDescuento);
   const setClientesStore = useStore((s) => s.setClientes);
+  const setClientesDescuentoStore = useStore((s) => s.setClientesDescuento);
   const logo = useStore((s) => s.logo);
   const setLogo = useStore((s) => s.setLogo);
 
@@ -190,6 +198,9 @@ export default function AdminPage() {
   const [exportandoIsla, setExportandoIsla] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoCliente, setNuevoCliente] = useState("");
+  const [tipoClientes, setTipoClientes] = useState<"credito" | "descuento">(
+    "credito"
+  );
   const [paginaCliente, setPaginaCliente] = useState(0);
   const [conectado, setConectado] = useState(false);
   const resetSesiones = useStore((s) => s.resetSesiones);
@@ -611,6 +622,7 @@ export default function AdminPage() {
       await resetPruebasCompleto();
       resetSesiones();
       setClientesStore([]);
+      setClientesDescuentoStore([]);
       setRemoteList([]);
       setSelectedId(null);
       setSelectedDia(null);
@@ -724,8 +736,10 @@ export default function AdminPage() {
     const arr = ((s as unknown as Record<string, { id: string }[]>)[tipo] || []).map(
       (r) => (r.id === rowId ? { ...r, ...patch } : r)
     );
-    persist({ ...s, [tipo]: arr });
-    aprenderCliente(patch.cliente);
+    const updated = { ...s, [tipo]: arr };
+    persist(updated);
+    sincronizarCreditosEditados(updated, tipo);
+    aprenderCliente(patch.cliente, tipo);
   }
   function onRemoveRegistro(sesionId: string, tipo: string, rowId: string) {
     const s = remote.find((x) => x.id === sesionId);
@@ -733,7 +747,9 @@ export default function AdminPage() {
     const arr = ((s as unknown as Record<string, { id: string }[]>)[tipo] || []).filter(
       (r) => r.id !== rowId
     );
-    persist({ ...s, [tipo]: arr });
+    const updated = { ...s, [tipo]: arr };
+    persist(updated);
+    sincronizarCreditosEditados(updated, tipo);
   }
   // El admin agrega un registro que el trabajador olvidó anotar (p. ej. un
   // pago, un crédito) directamente desde "Reporte del día".
@@ -744,14 +760,30 @@ export default function AdminPage() {
       ...((s as unknown as Record<string, { id: string }[]>)[tipo] ?? []),
       { ...row, id: uid() },
     ];
-    persist({ ...s, [tipo]: arr });
-    aprenderCliente(row.cliente);
+    const updated = { ...s, [tipo]: arr };
+    persist(updated);
+    sincronizarCreditosEditados(updated, tipo);
+    aprenderCliente(row.cliente, tipo);
   }
   // El admin escribe nombres de cliente nuevos al registrar/editar créditos,
   // descuentos o adelantos: se aprenden en la base de clientes y se sincronizan
   // (igual que cuando el trabajador los anota desde su turno).
-  function aprenderCliente(nombre: unknown) {
+  function sincronizarCreditosEditados(sesion: Sesion, tipo: string) {
+    if (tipo !== "creditos" || !sesion.cerrada) return;
+    sincronizarCreditosSesion(sesion).catch((e) => {
+      console.error("No se pudo sincronizar créditos editados:", e);
+      toast.error("El crédito se guardó en el turno, pero no se sincronizó con clientes");
+    });
+  }
+
+  function aprenderCliente(nombre: unknown, tipo: string = "creditos") {
     if (typeof nombre !== "string" || !nombre.trim()) return;
+    if (tipo === "descuentos") {
+      if (aprenderClientesDescuentoStore([nombre])) {
+        addClientesDescuentoRemoto([nombre]).catch(() => {});
+      }
+      return;
+    }
     // Aditivo: solo agrega el nombre nuevo a la lista remota, nunca pisa la
     // lista completa (así no resucita clientes que el admin ya eliminó).
     if (aprenderClientesStore([nombre])) {
@@ -759,22 +791,32 @@ export default function AdminPage() {
     }
   }
   // ---- Gestión de la lista de clientes (autocompletado) ----
-  function persistClientes(lista: string[]) {
+  function persistClientes(
+    lista: string[],
+    tipo: "credito" | "descuento" = tipoClientes
+  ) {
+    if (tipo === "descuento") {
+      setClientesDescuentoStore(lista);
+      setClientesDescuentoRemoto(lista).catch(() => {});
+      return;
+    }
     setClientesStore(lista);
     setClientesRemoto(lista).catch(() => {});
   }
   function agregarCliente() {
     const nombre = nuevoCliente.trim().toUpperCase();
     if (!nombre) return;
-    if (clientes.some((c) => c.toUpperCase() === nombre)) {
+    const lista = tipoClientes === "descuento" ? clientesDescuento : clientes;
+    if (lista.some((c) => c.toUpperCase() === nombre)) {
       setNuevoCliente("");
       return;
     }
-    persistClientes([...clientes, nombre]);
+    persistClientes([...lista, nombre]);
     setNuevoCliente("");
   }
   function quitarCliente(nombre: string) {
-    persistClientes(clientes.filter((c) => c !== nombre));
+    const lista = tipoClientes === "descuento" ? clientesDescuento : clientes;
+    persistClientes(lista.filter((c) => c !== nombre));
   }
   function onUpdateOdometro(
     sesionId: string,
@@ -1351,7 +1393,9 @@ export default function AdminPage() {
           ) : vista === "clientes" ? (
             (() => {
               const POR_PAGINA = 30;
-              const ordenados = clientesOrdenados(clientes);
+              const esDescuento = tipoClientes === "descuento";
+              const listaClientes = esDescuento ? clientesDescuento : clientes;
+              const ordenados = clientesOrdenados(listaClientes);
               const totalPaginas = Math.max(1, Math.ceil(ordenados.length / POR_PAGINA));
               const pagina = Math.min(paginaCliente, totalPaginas - 1);
               const visibles = ordenados.slice(
@@ -1362,12 +1406,36 @@ export default function AdminPage() {
                 <div className="max-w-3xl rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
                   <h3 className="mb-1 text-base font-bold">Gestión de clientes</h3>
                   <p className="mb-3 text-xs text-muted-foreground">
-                    Clientes que aparecen como sugerencia al registrar créditos y
-                    descuentos. Se guardan en MAYÚSCULAS y se sincronizan al instante.
+                    Clientes de crédito y clientes de descuento se manejan por separado.
+                    El mismo nombre puede existir en ambas listas sin mezclarse.
                   </p>
+                  <div className="mb-3 inline-flex rounded-lg border bg-muted/40 p-1">
+                    <Button
+                      size="sm"
+                      variant={!esDescuento ? "default" : "ghost"}
+                      className="h-8"
+                      onClick={() => {
+                        setTipoClientes("credito");
+                        setPaginaCliente(0);
+                      }}
+                    >
+                      Clientes crédito
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={esDescuento ? "default" : "ghost"}
+                      className="h-8"
+                      onClick={() => {
+                        setTipoClientes("descuento");
+                        setPaginaCliente(0);
+                      }}
+                    >
+                      Clientes descuento
+                    </Button>
+                  </div>
                   <div className="mb-3 flex max-w-md gap-2">
                     <Input
-                      placeholder="Nombre del cliente"
+                      placeholder={esDescuento ? "Cliente para descuento" : "Cliente de crédito"}
                       value={nuevoCliente}
                       onChange={(e) => setNuevoCliente(e.target.value.toUpperCase())}
                       onKeyDown={(e) => e.key === "Enter" && agregarCliente()}
@@ -1377,7 +1445,7 @@ export default function AdminPage() {
                       + Agregar
                     </Button>
                   </div>
-                  {clientes.length === 0 ? (
+                  {listaClientes.length === 0 ? (
                     <p className="text-xs text-muted-foreground">
                       No hay clientes registrados.
                     </p>

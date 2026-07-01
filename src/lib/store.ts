@@ -80,7 +80,8 @@ interface StoreState {
   setSync: (parcial: Partial<SyncState>) => void;
   precios: Precios; // precios globales (sincronizados con Firestore config/precios)
   trabajadores: string[]; // sincronizados con Firestore config/trabajadores
-  clientes: string[]; // nombres de clientes (créditos/descuentos/adelantos), sincronizados con config/clientes
+  clientes: string[]; // nombres de clientes de crédito, sincronizados con config/clientes
+  clientesDescuento: string[]; // nombres libres usados en descuentos, sincronizados con config/clientes_descuento
   admins: Admin[]; // administradores con nombre+contraseña, sincronizados con config/admins
   logo: string | null; // logo de la empresa (data URL), sincronizado con config/logo
 
@@ -88,11 +89,13 @@ interface StoreState {
   setPrecio: (k: PrecioKey, v: number) => void;
   setTrabajadores: (t: string[]) => void;
   setClientes: (c: string[]) => void;
+  setClientesDescuento: (c: string[]) => void;
   setAdmins: (a: Admin[]) => void;
   setLogo: (url: string | null) => void;
   // Aprende uno o más nombres de cliente: los agrega a la lista si no existen
   // (sin distinguir mayúsculas/acentos). Devuelve true si la lista cambió.
   aprenderClientes: (nombres: (string | undefined)[]) => boolean;
+  aprenderClientesDescuento: (nombres: (string | undefined)[]) => boolean;
 
   loginAdmin: (adminId?: string | null) => void;
   loginTrabajador: (nombre: string) => void;
@@ -208,6 +211,7 @@ export const useStore = create<StoreState>()(
       precios: { ...PRECIOS_DEFAULT },
       trabajadores: [...TRABAJADORES_DEFAULT],
       clientes: [],
+      clientesDescuento: [],
       admins: [],
       logo: null,
 
@@ -215,6 +219,7 @@ export const useStore = create<StoreState>()(
       setPrecio: (k, v) => set((s) => ({ precios: { ...s.precios, [k]: v } })),
       setTrabajadores: (t) => set({ trabajadores: t }),
       setClientes: (c) => set({ clientes: c }),
+      setClientesDescuento: (c) => set({ clientesDescuento: c }),
       setAdmins: (a) => set({ admins: a }),
       setLogo: (url) => set({ logo: url }),
       aprenderClientes: (nombres) => {
@@ -222,6 +227,13 @@ export const useStore = create<StoreState>()(
         const siguientes = aprenderClientes(actuales, nombres);
         if (siguientes === actuales) return false; // sin cambios
         set({ clientes: siguientes });
+        return true;
+      },
+      aprenderClientesDescuento: (nombres) => {
+        const actuales = get().clientesDescuento;
+        const siguientes = aprenderClientes(actuales, nombres);
+        if (siguientes === actuales) return false;
+        set({ clientesDescuento: siguientes });
         return true;
       },
 
@@ -394,7 +406,7 @@ export const useStore = create<StoreState>()(
         })),
 
       addDescuento: (d) => {
-        get().aprenderClientes([d.cliente]);
+        get().aprenderClientesDescuento([d.cliente]);
         mutateCurrent(set, get, (s) => ({
           ...s,
           descuentos: [...s.descuentos, { ...d, id: uid() }],
@@ -556,9 +568,10 @@ export const useStore = create<StoreState>()(
       // a su turno abierto; si ese turno ya no existe en Supabase, no habrá
       // sesión activa y se vuelve al setup, sin mostrar datos viejos.
       partialize: (state) => {
-        const { sesiones, clientes, sync, ...resto } = state;
+        const { sesiones, clientes, clientesDescuento, sync, ...resto } = state;
         void sesiones;
         void clientes;
+        void clientesDescuento;
         void sync;
         return resto as StoreState;
       },
@@ -570,6 +583,7 @@ export const useStore = create<StoreState>()(
         state.sesiones = [];
         if (persistedVersion < 5) state.currentSesionId = null;
         state.clientes = [];
+        state.clientesDescuento = [];
         // v7: la auth pasó a incluir `nombre`/`permisos` (Supabase Auth). Se
         // normaliza cualquier sesión persistida antes; el AuthProvider la
         // re-deriva de Supabase al montar (fuente de verdad).

@@ -130,7 +130,10 @@ export function ReporteDiaVista({
   // Precio EFECTIVO de un turno (snapshot de la sesión con fallback al global).
   const preciosSes = (s: Sesion) => preciosDe(s, precios);
   const precioSesFn = (s: Sesion) => (p: ProductoId) => preciosSes(s)[p] ?? 0;
-  const sugClientes = clientesOrdenados(useStore((s) => s.clientes));
+  const sugClientesCredito = clientesOrdenados(useStore((s) => s.clientes));
+  const sugClientesDescuento = clientesOrdenados(
+    useStore((s) => s.clientesDescuento)
+  );
 
   // Sesiones del turno (o de todos los turnos si general), filtradas por isla
   const filtradas = delDia.filter(
@@ -283,7 +286,12 @@ export function ReporteDiaVista({
       total: rep.totalCreditos,
       grupos: grupos(
         "creditos",
-        (s) => colsCredito(productoOpts(s), precioSesFn(s), sugClientes) as unknown as Col<RowAny>[]
+        (s) =>
+          colsCredito(
+            productoOpts(s),
+            precioSesFn(s),
+            sugClientesCredito
+          ) as unknown as Col<RowAny>[]
       ),
       nuevo: nuevoRowAny((s) => nuevoCredito(productoOpts(s)[0]?.value ?? "bio")),
       validar: validarRowAny(validarCredito),
@@ -329,7 +337,12 @@ export function ReporteDiaVista({
       total: rep.totalDescuentos,
       grupos: grupos(
         "descuentos",
-        (s) => colsDescuento(productoOpts(s), precioSesFn(s), sugClientes) as unknown as Col<RowAny>[]
+        (s) =>
+          colsDescuento(
+            productoOpts(s),
+            precioSesFn(s),
+            sugClientesDescuento
+          ) as unknown as Col<RowAny>[]
       ),
       nuevo: nuevoRowAny((s) => nuevoDescuento(productoOpts(s)[0]?.value ?? "bio")),
       validar: validarRowAny(validarDescuento),

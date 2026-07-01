@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { useStore } from "@/lib/store";
 import { diaMenos, diaOperativoActual } from "@/lib/calc";
 import {
+  addClientesDescuentoRemoto,
   addClientesRemoto,
   fetchSesionesDesde,
   subscribeConfig,
@@ -29,6 +30,7 @@ export function SupabaseSync() {
   const setPrecios = useStore((s) => s.setPrecios);
   const setTrabajadores = useStore((s) => s.setTrabajadores);
   const setClientes = useStore((s) => s.setClientes);
+  const setClientesDescuento = useStore((s) => s.setClientesDescuento);
   const setAdmins = useStore((s) => s.setAdmins);
   const setLogo = useStore((s) => s.setLogo);
 
@@ -76,6 +78,14 @@ export function SupabaseSync() {
     });
   }, [auth?.userId, setClientes]);
 
+  useEffect(() => {
+    if (!supabaseHabilitado || !auth?.userId) return;
+    return subscribeConfig<{ nombres: string[] }>("clientes_descuento", (v) => {
+      if (!Array.isArray(v.nombres)) return;
+      setClientesDescuento(v.nombres);
+    });
+  }, [auth?.userId, setClientesDescuento]);
+
   // Sube a Supabase SOLO los clientes nuevos que se aprenden localmente
   // (debounced y de forma ADITIVA). Antes subía la lista COMPLETA en cada
   // cambio: si este dispositivo tenía un cliente que el admin ya había
@@ -100,6 +110,32 @@ export function SupabaseSync() {
         const aSubir = buffer;
         buffer = [];
         addClientesRemoto(aSubir).catch(() => {});
+      }, 1000);
+    });
+    return () => {
+      if (timer) clearTimeout(timer);
+      unsub();
+    };
+  }, [auth?.userId]);
+
+  useEffect(() => {
+    if (!supabaseHabilitado || !auth?.userId) return;
+    let prev = useStore.getState().clientesDescuento;
+    let buffer: string[] = [];
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsub = useStore.subscribe(() => {
+      const curr = useStore.getState().clientesDescuento;
+      if (curr === prev) return;
+      const vistos = new Set(prev.map(normalizarCliente));
+      const nuevos = curr.filter((c) => !vistos.has(normalizarCliente(c)));
+      prev = curr;
+      if (nuevos.length === 0) return;
+      buffer.push(...nuevos);
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        const aSubir = buffer;
+        buffer = [];
+        addClientesDescuentoRemoto(aSubir).catch(() => {});
       }, 1000);
     });
     return () => {
