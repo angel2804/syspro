@@ -120,12 +120,27 @@ export function SupabaseSync() {
       mergeRemoteSesiones(remotas, cutoff);
       if (primera) {
         primera = false;
+        useStore.getState().setSync({ estado: "conectado" });
         toast.success("Conectado a Supabase", { duration: 2000 });
       }
     });
 
     return unsub;
   }, [mergeRemoteSesiones]);
+
+  // Estado de conexión de red (offline/online) reflejado en el indicador.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onOffline = () => useStore.getState().setSync({ estado: "sinConexion" });
+    const onOnline = () => useStore.getState().setSync({ estado: "conectado" });
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("online", onOnline);
+    if (!navigator.onLine) onOffline();
+    return () => {
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", onOnline);
+    };
+  }, []);
 
   // Guardado automático: SOLO la sesión activa (currentSesionId), debounced.
   useEffect(() => {
@@ -134,21 +149,35 @@ export function SupabaseSync() {
     let timer: ReturnType<typeof setTimeout> | null = null;
 
     const flush = async () => {
-      const { sesiones, currentSesionId } = useStore.getState();
+      const { sesiones, currentSesionId, setSync } = useStore.getState();
       if (!currentSesionId) return;
       const s = sesiones.find((x) => x.id === currentSesionId);
       if (!s) return;
       const json = JSON.stringify(s);
       if (json === ultimoJson) return;
+      setSync({ estado: "guardando" });
       try {
         await upsertSesion(s);
         ultimoJson = json;
+        setSync({ estado: "guardado", ultimoGuardado: Date.now() });
       } catch (e) {
         console.error("Supabase guardar:", e);
+        setSync({ estado: "sinConexion" });
       }
     };
 
     const unsub = useStore.subscribe(() => {
+      const { sesiones, currentSesionId, sync, setSync } = useStore.getState();
+      if (!currentSesionId) return;
+      const s = sesiones.find((x) => x.id === currentSesionId);
+      if (!s) return;
+      // Solo reacciona a cambios REALES de la sesión activa; si el JSON es igual
+      // al último guardado, el disparo vino de otro cambio (p. ej. el propio
+      // estado de sync) y se ignora — así no hay bucle de re-render.
+      if (JSON.stringify(s) === ultimoJson) return;
+      if (sync.estado !== "guardando" && sync.estado !== "pendiente") {
+        setSync({ estado: "pendiente" });
+      }
       if (timer) clearTimeout(timer);
       timer = setTimeout(flush, 1000);
     });

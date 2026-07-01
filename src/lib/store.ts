@@ -52,10 +52,32 @@ interface AuthState {
   adminId?: string | null;
 }
 
+// Estado de sincronización con Supabase, visible en la UI operativa para que el
+// trabajador/admin sepa si sus cambios están guardados en la nube.
+//   conectado   → suscrito y al día, sin cambios pendientes
+//   pendiente   → hay ediciones locales aún no enviadas
+//   guardando   → enviando a Supabase ahora
+//   guardado    → recién confirmado (muestra "último guardado")
+//   sinConexion → falló el guardado / sin red
+export type SyncEstado =
+  | "conectando"
+  | "conectado"
+  | "pendiente"
+  | "guardando"
+  | "guardado"
+  | "sinConexion";
+
+export interface SyncState {
+  estado: SyncEstado;
+  ultimoGuardado: number | null; // ms epoch del último guardado confirmado
+}
+
 interface StoreState {
   auth: AuthState | null;
   sesiones: Sesion[];
   currentSesionId: string | null;
+  sync: SyncState;
+  setSync: (parcial: Partial<SyncState>) => void;
   precios: Precios; // precios globales (sincronizados con Firestore config/precios)
   trabajadores: string[]; // sincronizados con Firestore config/trabajadores
   clientes: string[]; // nombres de clientes (créditos/descuentos/adelantos), sincronizados con config/clientes
@@ -181,6 +203,8 @@ export const useStore = create<StoreState>()(
       auth: null,
       sesiones: [],
       currentSesionId: null,
+      sync: { estado: "conectando", ultimoGuardado: null },
+      setSync: (parcial) => set((s) => ({ sync: { ...s.sync, ...parcial } })),
       precios: { ...PRECIOS_DEFAULT },
       trabajadores: [...TRABAJADORES_DEFAULT],
       clientes: [],
@@ -532,9 +556,10 @@ export const useStore = create<StoreState>()(
       // a su turno abierto; si ese turno ya no existe en Supabase, no habrá
       // sesión activa y se vuelve al setup, sin mostrar datos viejos.
       partialize: (state) => {
-        const { sesiones, clientes, ...resto } = state;
+        const { sesiones, clientes, sync, ...resto } = state;
         void sesiones;
         void clientes;
+        void sync;
         return resto as StoreState;
       },
       migrate: (persisted) => {

@@ -98,6 +98,36 @@ export async function deleteTodasSesiones(): Promise<void> {
   if (error) throw error;
 }
 
+// Reset TOTAL para pruebas: borra TODOS los datos operativos y de cuenta
+// corriente para dejar el sistema "de cero", CONSERVANDO solo las copias de
+// seguridad (`backups`), las cuentas de usuario (`profiles`/Auth) y la
+// configuración de settings (precios, trabajadores, logo). Se borra en orden de
+// dependencias para no violar las claves foráneas:
+//   pagos_credito → creditos → sesiones → cliente_alias → clientes →
+//   precio_eventos → audit_log.
+// `created_at >= 0` matchea todas las filas y satisface el guardarraíl de
+// Supabase que prohíbe DELETE sin filtro.
+export async function resetPruebasCompleto(): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  const tablasEnOrden = [
+    "pagos_credito",
+    "creditos",
+    "sesiones",
+    "cliente_alias",
+    "clientes",
+    "precio_eventos",
+    "audit_log",
+  ];
+  for (const tabla of tablasEnOrden) {
+    const { error } = await sb.from(tabla).delete().gte("created_at", 0);
+    if (error) throw error;
+  }
+  // La lista de autocompletado de clientes (config/clientes) también se vacía;
+  // precios, trabajadores y logo se conservan.
+  await setConfig("clientes", { nombres: [] });
+}
+
 // Suscripción en vivo a una ventana de días. Trae el estado inicial y luego
 // re-consulta (debounced) ante cualquier cambio en la tabla. Reemplaza al
 // `onSnapshot` de Firestore. Devuelve una función para desuscribir.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,11 +18,10 @@ import {
   crearBackup,
   deleteBackup,
   deleteSesion,
-  deleteTodasSesiones,
+  resetPruebasCompleto,
   DIAS_BACKUP,
   fetchBackups,
   restaurarBackup,
-  setAdminsRemoto,
   setLogoRemoto,
   setPreciosRemoto,
   setClientesRemoto,
@@ -34,13 +33,19 @@ import {
 } from "@/lib/db";
 import { clientesOrdenados } from "@/lib/clientes";
 import { entradaAutomatica, uid, useStore } from "@/lib/store";
+import { useHydrated } from "@/lib/use-hydrated";
 import { logoutSupabase } from "@/lib/data/auth";
+import {
+  fetchHistorialPrecios,
+  registrarCambioPrecio,
+  type PrecioEvento,
+} from "@/lib/data/precios";
+import { registrarAuditoria } from "@/lib/data/auditoria";
 import {
   BALONES,
   CONFIG_PASSWORD,
   getIsla,
   ISLAS,
-  PERMISOS,
   PERMISOS_TODOS,
   PRODUCTOS,
   TURNOS,
@@ -53,10 +58,11 @@ import {
   diasConAlgunaSesionCerrada,
   diasCompletos,
   islasCerradasDeTurno,
+  soles,
   turnosCompletosDeDia,
   turnosConAlgunaIslaCerrada,
 } from "@/lib/calc";
-import type { Admin, Permiso, PrecioKey, Precios, Rol, Sesion, TurnoId } from "@/lib/types";
+import type { Permiso, PrecioKey, Precios, Rol, Sesion, TurnoId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SesionVista } from "@/components/grifo/sesion-vista";
 import { ReporteDiaVista } from "@/components/grifo/reporte-dia-vista";
@@ -87,6 +93,7 @@ import {
   ArrowLeftRight,
   Wallet,
   ScrollText,
+  History,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -156,8 +163,6 @@ export default function AdminPage() {
   const setClientesStore = useStore((s) => s.setClientes);
   const logo = useStore((s) => s.logo);
   const setLogo = useStore((s) => s.setLogo);
-  const admins = useStore((s) => s.admins);
-  const setAdmins = useStore((s) => s.setAdmins);
 
   // Una sola fuente acotada y en vivo: los últimos 60 días operativos.
   // Incluye tanto los turnos activos como los días recientes para reporte/
@@ -177,16 +182,15 @@ export default function AdminPage() {
   const [nuevoCliente, setNuevoCliente] = useState("");
   const [paginaCliente, setPaginaCliente] = useState(0);
   const [conectado, setConectado] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
   const resetSesiones = useStore((s) => s.resetSesiones);
   const [configPass, setConfigPass] = useState("");
   const [configUnlocked, setConfigUnlocked] = useState(false);
-  const [nuevoAdminNombre, setNuevoAdminNombre] = useState("");
-  const [nuevoAdminPass, setNuevoAdminPass] = useState("");
-  const [nuevoAdminPermisos, setNuevoAdminPermisos] =
-    useState<Permiso[]>(PERMISOS_TODOS);
   const [confirmandoReset, setConfirmandoReset] = useState(false);
   const [reseteando, setReseteando] = useState(false);
+  // Forzar liberación de un turno abierto (zona de pruebas): lo borra para que
+  // el slot quede libre "como si no se hubiera empezado".
+  const [turnoALiberar, setTurnoALiberar] = useState<Sesion | null>(null);
+  const [liberando, setLiberando] = useState(false);
   // ---- Mover trabajador (corregir isla mal elegida) ----
   const [moverOrigenId, setMoverOrigenId] = useState<string | null>(null);
   const [moverDestinoIsla, setMoverDestinoIsla] = useState<string | null>(null);
@@ -196,7 +200,7 @@ export default function AdminPage() {
   const [creandoBackup, setCreandoBackup] = useState(false);
   const [restaurandoId, setRestaurandoId] = useState<string | null>(null);
   const [backupARestaurar, setBackupARestaurar] = useState<Backup | null>(null);
-  useEffect(() => setHydrated(true), []);
+  const hydrated = useHydrated();
 
   // Acceso al panel: dueño, admin o encargado (staff). El trabajador no entra.
   const esStaff = (r?: Rol) => r === "dueno" || r === "admin" || r === "encargado";
@@ -221,6 +225,9 @@ export default function AdminPage() {
     const primera = PERMISOS_TODOS.find(
       (p) => p !== "venta-normal" && permisos.includes(p)
     );
+    // Ajuste idempotente de la vista a los permisos cargados (async): patrón
+    // de sincronización con datos externos, no un bucle de render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (primera) setVista(primera as Vista);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [permisos, vista]);
@@ -257,21 +264,29 @@ export default function AdminPage() {
     [remote, selectedDia]
   );
 
+  // Los siguientes efectos SINCRONIZAN la selección por defecto con las listas
+  // que llegan de Supabase (async). Son idempotentes (solo actúan si la
+  // selección actual dejó de ser válida), no bucles de render; por eso se
+  // exime la regla set-state-in-effect.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!selectedId && activos.length) setSelectedId(activos[0].id);
   }, [activos, selectedId]);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!selectedDia && dias.length) setSelectedDia(dias[0]);
   }, [dias, selectedDia]);
   // Asegura que el turno a exportar sea uno que esté completo.
   useEffect(() => {
     if (turnosListos.length && !turnosListos.includes(exportTurno)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setExportTurno(turnosListos[0]);
     }
   }, [turnosListos, exportTurno]);
   // Asegura que el turno/isla del export individual sean válidos.
   useEffect(() => {
     if (turnosConIsla.length && !turnosConIsla.includes(exportTurnoIsla)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setExportTurnoIsla(turnosConIsla[0]);
     }
   }, [turnosConIsla, exportTurnoIsla]);
@@ -288,6 +303,7 @@ export default function AdminPage() {
   );
   useEffect(() => {
     if (islasCerradasTurnoIsla.length && !islasCerradasTurnoIsla.includes(exportIslaId ?? "")) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setExportIslaId(islasCerradasTurnoIsla[0]);
     } else if (!islasCerradasTurnoIsla.length) {
       setExportIslaId(null);
@@ -305,6 +321,8 @@ export default function AdminPage() {
     if (!aBorrar.length) return;
     aBorrar.forEach((s) => deleteSesion(s.id).catch(() => {}));
     const idsBorrados = new Set(aBorrar.map((s) => s.id));
+    // Poda de retención: refleja localmente lo que se borró en Supabase.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setRemoteList((prev) => prev.filter((s) => !idsBorrados.has(s.id)));
   }, [remote]);
 
@@ -318,10 +336,63 @@ export default function AdminPage() {
       prev.map((s) => (s.id === updated.id ? updated : s))
     );
     upsertSesion(updated).catch(() => {});
+    // Corregir un turno YA CERRADO es una acción sensible: se audita
+    // (debounced por sesión, para no registrar una entrada por tecla mientras
+    // se edita un campo numérico).
+    if (updated.cerrada) auditarEdicionCerrada(updated);
   }
-  function onChangePrecio(k: PrecioKey, v: number) {
+  // Debounce por id de sesión: acumula las ediciones de un turno cerrado y
+  // registra UNA entrada de auditoría cuando el admin deja de escribir.
+  const auditTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  function auditarEdicionCerrada(s: Sesion) {
+    const prev = auditTimers.current[s.id];
+    if (prev) clearTimeout(prev);
+    auditTimers.current[s.id] = setTimeout(() => {
+      delete auditTimers.current[s.id];
+      registrarAuditoria({
+        accion: "edicion_sesion",
+        entidad: "turno",
+        entidadId: s.id,
+        actorId: auth?.userId,
+        actorNombre: auth?.nombre,
+        detalle: {
+          correccion: "turno_cerrado",
+          dia: s.diaOperativo,
+          isla: s.islaId,
+          turno: s.turno,
+        },
+      });
+    }, 2500);
+  }
+  function onChangePrecio(
+    k: PrecioKey,
+    v: number,
+    opts?: { motivo?: string; aplica?: "proximo" | "activo" }
+  ) {
+    const anterior = precios[k] ?? null;
+    if (v === anterior) return; // sin cambio real: no tocar historial
     setPrecio(k, v);
     setPreciosRemoto({ ...precios, [k]: v }).catch(() => {});
+    // Historial de precios (Fase 5): cada cambio queda con quién/cuándo/por qué.
+    // El turno activo NO se recalcula (conserva su precio congelado); si
+    // `aplica: 'activo'` el trabajador recibe un banner en vivo.
+    registrarCambioPrecio({
+      producto: k,
+      precioAnterior: anterior,
+      precioNuevo: v,
+      aplica: opts?.aplica ?? "proximo",
+      motivo: opts?.motivo,
+      actorId: auth?.userId,
+      actorNombre: auth?.nombre,
+    });
+    registrarAuditoria({
+      accion: "cambio_precio",
+      entidad: "precio",
+      entidadId: k,
+      actorId: auth?.userId,
+      actorNombre: auth?.nombre,
+      detalle: { producto: k, anterior, nuevo: v, aplica: opts?.aplica ?? "proximo" },
+    });
   }
   // Corrige el precio de un turno y lo propaga a TODOS los turnos del mismo
   // periodo (mañana/tarde/noche) de ese día operativo, para mantener el precio
@@ -341,6 +412,14 @@ export default function AdminPage() {
       prev.map((s) => actualizadas.find((u) => u.id === s.id) ?? s)
     );
     await Promise.all(actualizadas.map((s) => upsertSesion(s).catch(() => {})));
+    registrarAuditoria({
+      accion: "edicion_sesion",
+      entidad: "turno",
+      entidadId: base.id,
+      actorId: auth?.userId,
+      actorNombre: auth?.nombre,
+      detalle: { correccion: "precios_periodo", dia, turno: base.turno, precios: nuevos },
+    });
     toast.success(
       `Precio actualizado en ${actualizadas.length} turno(s) de ${turnoLabel(
         base.turno
@@ -364,46 +443,36 @@ export default function AdminPage() {
     persistTrabajadores(trabajadores.filter((t) => t !== nombre));
   }
 
-  // ---- Gestión de administradores (sección desarrollador) ----
-  function persistAdmins(lista: Admin[]) {
-    setAdmins(lista);
-    setAdminsRemoto(lista).catch(() => {});
-  }
-  function agregarAdmin() {
-    const nombre = nuevoAdminNombre.trim();
-    const pass = nuevoAdminPass.trim();
-    if (!nombre || !pass) {
-      toast.error("Nombre y contraseña son obligatorios");
-      return;
+  // ---- Forzar liberación de un turno abierto (zona de pruebas) ----
+  // Borra la sesión del turno para que el slot quede LIBRE, como si nunca se
+  // hubiera empezado; así otro trabajador puede volver a tomarlo. Solo aplica a
+  // turnos NO cerrados (los cerrados ya cuentan en los reportes).
+  async function liberarTurno(s: Sesion) {
+    setLiberando(true);
+    try {
+      await deleteSesion(s.id);
+      setRemoteList((prev) => prev.filter((x) => x.id !== s.id));
+      registrarAuditoria({
+        accion: "edicion_sesion",
+        entidad: "turno",
+        entidadId: s.id,
+        actorId: auth?.userId,
+        actorNombre: auth?.nombre,
+        detalle: {
+          correccion: "turno_liberado",
+          dia: s.diaOperativo,
+          isla: s.islaId,
+          turno: s.turno,
+          trabajador: s.trabajador,
+        },
+      });
+      toast.success("Turno liberado: el slot quedó disponible");
+    } catch {
+      toast.error("No se pudo liberar el turno");
+    } finally {
+      setLiberando(false);
+      setTurnoALiberar(null);
     }
-    if (admins.some((a) => a.nombre.toLowerCase() === nombre.toLowerCase())) {
-      toast.error("Ya existe un administrador con ese nombre");
-      return;
-    }
-    persistAdmins([
-      ...admins,
-      { id: uid(), nombre, password: pass, permisos: nuevoAdminPermisos },
-    ]);
-    setNuevoAdminNombre("");
-    setNuevoAdminPass("");
-    setNuevoAdminPermisos(PERMISOS_TODOS);
-    toast.success("Administrador creado");
-  }
-  function quitarAdmin(id: string) {
-    persistAdmins(admins.filter((a) => a.id !== id));
-  }
-  // Activa/desactiva un permiso para un admin ya creado y lo guarda.
-  function togglePermisoAdmin(id: string, permiso: Permiso) {
-    persistAdmins(
-      admins.map((a) => {
-        if (a.id !== id) return a;
-        const actuales = a.permisos ?? PERMISOS_TODOS;
-        const permisos = actuales.includes(permiso)
-          ? actuales.filter((p) => p !== permiso)
-          : [...actuales, permiso];
-        return { ...a, permisos };
-      })
-    );
   }
 
   // ---- Logo de la empresa ----
@@ -490,16 +559,21 @@ export default function AdminPage() {
   }
 
   // ---- Resetear toda la base de datos (Configuraciones, solo pruebas) ----
+  // Borra TODO (turnos, créditos, pagos, clientes, historial de precios,
+  // auditoría) y deja el sistema de cero, conservando SOLO las copias de
+  // seguridad, las cuentas de usuario y la configuración (precios/trabajadores).
   async function resetBaseDatos() {
     setReseteando(true);
     try {
-      await deleteTodasSesiones();
+      await resetPruebasCompleto();
       resetSesiones();
+      setClientesStore([]);
       setRemoteList([]);
       setSelectedId(null);
       setSelectedDia(null);
-      toast.success("Base de datos reseteada");
-    } catch {
+      toast.success("Sistema reseteado: sin datos, listo para probar de cero");
+    } catch (e) {
+      console.error("reset:", e);
       toast.error("No se pudo resetear la base de datos");
     } finally {
       setReseteando(false);
@@ -519,8 +593,13 @@ export default function AdminPage() {
   // completarse cada turno (desde el cierre del trabajador) y también manual.
   useEffect(() => {
     if (!conectado) return;
-    refrescarBackups();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    let vivo = true;
+    fetchBackups()
+      .then((b) => vivo && setBackups(b))
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
   }, [conectado]);
 
   async function backupManual() {
@@ -715,6 +794,7 @@ export default function AdminPage() {
     }
     const dia = diaOperativo(moverOrigen);
     const turno = moverOrigen.turno;
+    // eslint-disable-next-line react-hooks/purity
     const ahora = Date.now();
     const islaOrigenNom = getIsla(moverOrigen.islaId)?.nombre ?? moverOrigen.islaId;
     const islaDestNom = getIsla(moverDestinoIsla)?.nombre ?? moverDestinoIsla;
@@ -846,7 +926,11 @@ export default function AdminPage() {
               <Users className="h-4 w-4" /> Usuarios
             </Link>
           )}
-          <PreciosEditor precios={precios} onChange={onChangePrecio} />
+          <PreciosEditor
+            precios={precios}
+            onChange={onChangePrecio}
+            puedeVerHistorial={auth?.permisos?.includes("precios-historial")}
+          />
           <ThemeToggle />
           <Button
             size="sm"
@@ -1572,94 +1656,6 @@ export default function AdminPage() {
                     )}
                   </div>
 
-                  {/* Administradores */}
-                  <div className="rounded-lg border border-amber-300/60 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-950/20">
-                    <h4 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-amber-700 dark:text-amber-300">
-                      <Users className="h-4 w-4" /> Administradores
-                    </h4>
-                    <p className="mb-3 text-xs text-muted-foreground">
-                      Crea administradores con su nombre y contraseña. Aparecerán
-                      en la pantalla de login (opción Administrador) para que
-                      ingresen con la contraseña que les asignes aquí.
-                    </p>
-                    <div className="mb-3 flex flex-col gap-2 sm:flex-row">
-                      <Input
-                        placeholder="Nombre"
-                        className="h-9"
-                        value={nuevoAdminNombre}
-                        onChange={(e) => setNuevoAdminNombre(e.target.value)}
-                      />
-                      <Input
-                        placeholder="Contraseña"
-                        className="h-9"
-                        value={nuevoAdminPass}
-                        onChange={(e) => setNuevoAdminPass(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && agregarAdmin()}
-                      />
-                      <Button size="sm" className="h-9 shrink-0" onClick={agregarAdmin}>
-                        Agregar
-                      </Button>
-                    </div>
-                    {/* Permisos del nuevo admin: qué secciones podrá ver */}
-                    <div className="mb-3 rounded-lg border border-amber-200/70 bg-white/60 p-2 dark:border-amber-500/20 dark:bg-black/20">
-                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                        Permisos del nuevo admin
-                      </p>
-                      <PermisosGrid
-                        seleccionados={nuevoAdminPermisos}
-                        onToggle={(p) =>
-                          setNuevoAdminPermisos((prev) =>
-                            prev.includes(p)
-                              ? prev.filter((x) => x !== p)
-                              : [...prev, p]
-                          )
-                        }
-                      />
-                    </div>
-                    {admins.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        Aún no hay administradores creados.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {admins.map((a) => (
-                          <div
-                            key={a.id}
-                            className="rounded-lg border bg-card p-2 text-sm"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="flex items-center gap-2">
-                                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-amber-500 to-orange-600 text-xs font-bold text-white">
-                                  {a.nombre[0]?.toUpperCase()}
-                                </span>
-                                <span className="font-medium">{a.nombre}</span>
-                              </span>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-7 px-2 text-red-500 hover:text-red-600"
-                                onClick={() => quitarAdmin(a.id)}
-                                title="Eliminar administrador"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                            {/* Permisos editables de este admin */}
-                            <div className="mt-2 border-t pt-2">
-                              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                Puede ver
-                              </p>
-                              <PermisosGrid
-                                seleccionados={a.permisos ?? PERMISOS_TODOS}
-                                onToggle={(p) => togglePermisoAdmin(a.id, p)}
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
                   {/* Logo de la empresa */}
                   <div className="rounded-lg border border-violet-300/60 bg-violet-50 p-3 dark:border-violet-500/30 dark:bg-violet-950/20">
                     <h4 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-violet-700 dark:text-violet-300">
@@ -1709,15 +1705,62 @@ export default function AdminPage() {
                     </div>
                   </div>
 
+                  {/* Liberar turnos abiertos (destrabar turnos de prueba) */}
+                  <div className="rounded-lg border border-orange-300/60 bg-orange-50 p-3 dark:border-orange-500/30 dark:bg-orange-950/20">
+                    <h4 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-orange-700 dark:text-orange-300">
+                      <RotateCcw className="h-4 w-4" /> Liberar turnos abiertos
+                    </h4>
+                    <p className="mb-3 text-xs text-muted-foreground">
+                      Fuerza la liberación de un turno en curso: se borra por
+                      completo y el slot queda <b>libre</b>, como si no se
+                      hubiera empezado, para que otro trabajador pueda tomarlo.
+                      Útil para destrabar turnos de prueba con trabajadores que
+                      ya no existen.
+                    </p>
+                    {activos.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        No hay turnos abiertos.
+                      </p>
+                    ) : (
+                      <div className="space-y-2">
+                        {activos.map((s) => (
+                          <div
+                            key={s.id}
+                            className="flex items-center justify-between gap-2 rounded-lg border bg-card p-2 text-xs"
+                          >
+                            <div>
+                              <div className="font-semibold">
+                                {getIsla(s.islaId)?.nombre ?? s.islaId} ·{" "}
+                                {turnoLabel(s.turno)}
+                              </div>
+                              <div className="text-[11px] text-muted-foreground">
+                                {s.trabajador || "(sin trabajador)"} · {s.diaOperativo}
+                              </div>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 shrink-0 border-orange-400 px-2 text-orange-700 hover:bg-orange-100 dark:text-orange-300 dark:hover:bg-orange-900/30"
+                              onClick={() => setTurnoALiberar(s)}
+                            >
+                              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Liberar
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
                   <div className="rounded-lg border border-red-300 bg-red-50 p-3 dark:bg-red-950/30">
                     <h4 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-red-600">
                       <AlertTriangle className="h-4 w-4" /> Zona de pruebas
                     </h4>
                     <p className="mb-3 text-xs text-muted-foreground">
-                      Borra TODOS los turnos y reportes guardados (Supabase y
-                      este dispositivo). Útil para probar el sistema desde
-                      cero. Los precios y la lista de trabajadores NO se
-                      borran.
+                      Borra TODO para probar el sistema de cero: turnos, créditos,
+                      pagos, clientes, historial de precios y auditoría. NO se
+                      borran las copias de seguridad, las cuentas de usuario
+                      (dueño/admin/trabajador) ni la configuración (precios y
+                      lista de trabajadores).
                     </p>
                     <Button
                       variant="destructive"
@@ -1809,9 +1852,10 @@ export default function AdminPage() {
             <DialogTitle>¿Borrar todos los turnos y reportes?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Esta acción no se puede deshacer. Se borrarán todas las sesiones
-            (turnos activos y días ya cerrados) de Supabase y de este
-            dispositivo.
+            Esta acción no se puede deshacer. Se borrará TODO (turnos, créditos,
+            pagos, clientes, historial de precios y auditoría) para dejar el
+            sistema de cero. Se conservan las copias de seguridad, las cuentas de
+            usuario y la configuración (precios/trabajadores).
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmandoReset(false)}>
@@ -1819,6 +1863,45 @@ export default function AdminPage() {
             </Button>
             <Button variant="destructive" onClick={resetBaseDatos} disabled={reseteando}>
               {reseteando ? "Borrando…" : "Sí, borrar todo"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={!!turnoALiberar}
+        onOpenChange={(o) => !o && setTurnoALiberar(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>¿Liberar este turno?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            El turno de{" "}
+            <b>
+              {turnoALiberar
+                ? `${getIsla(turnoALiberar.islaId)?.nombre ?? turnoALiberar.islaId} · ${turnoLabel(turnoALiberar.turno)}`
+                : ""}
+            </b>{" "}
+            {turnoALiberar?.trabajador ? (
+              <>
+                (<b>{turnoALiberar.trabajador}</b>){" "}
+              </>
+            ) : null}
+            se borrará por completo y el slot quedará libre, como si no se
+            hubiera empezado. Se perderán los registros de ese turno. Esta
+            acción no se puede deshacer.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTurnoALiberar(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => turnoALiberar && liberarTurno(turnoALiberar)}
+              disabled={liberando}
+            >
+              {liberando ? "Liberando…" : "Sí, liberar turno"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1880,9 +1963,15 @@ function PrecioInput({
 function PreciosEditor({
   precios,
   onChange,
+  puedeVerHistorial,
 }: {
   precios: import("@/lib/types").Precios;
-  onChange: (k: PrecioKey, v: number) => void;
+  onChange: (
+    k: PrecioKey,
+    v: number,
+    opts?: { motivo?: string; aplica?: "proximo" | "activo" }
+  ) => void;
+  puedeVerHistorial?: boolean;
 }) {
   const combustibles: PrecioKey[] = ["bio", "regular", "premium", "glp"];
   const balones: PrecioKey[] = ["gasfull", "zetagas"];
@@ -1890,6 +1979,9 @@ function PreciosEditor({
     (PRODUCTOS as Record<string, string>)[k] ??
     (BALONES as Record<string, string>)[k] ??
     k;
+  const [motivo, setMotivo] = useState("");
+  const [aplica, setAplica] = useState<"proximo" | "activo">("proximo");
+  const [verHistorial, setVerHistorial] = useState(false);
 
   return (
     <Dialog>
@@ -1909,9 +2001,42 @@ function PreciosEditor({
           <DialogTitle>Precios del sistema</DialogTitle>
         </DialogHeader>
         <p className="text-xs text-muted-foreground">
-          Los cambios se aplican en todo el sistema (turnos y reportes) en tiempo
-          real.
+          El nuevo precio rige desde el <b>próximo turno</b>. Los turnos abiertos
+          conservan su precio congelado; si eliges <b>Aplicar ya</b>, al
+          trabajador le llega un aviso en vivo.
         </p>
+        {/* Motivo + alcance del cambio (quedan en el historial) */}
+        <div className="grid grid-cols-1 gap-2 rounded-lg border bg-muted/40 p-2.5">
+          <div className="space-y-1">
+            <Label className="text-xs">Motivo del cambio (opcional)</Label>
+            <Input
+              className="h-8"
+              placeholder="Ej. ajuste de mayorista"
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant={aplica === "proximo" ? "default" : "outline"}
+              className="h-7 flex-1 text-xs"
+              onClick={() => setAplica("proximo")}
+            >
+              Desde próximo turno
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant={aplica === "activo" ? "default" : "outline"}
+              className="h-7 flex-1 text-xs"
+              onClick={() => setAplica("activo")}
+            >
+              Aplicar ya (avisar)
+            </Button>
+          </div>
+        </div>
         <div className="space-y-3">
           <div>
             <h4 className="mb-1 text-xs font-bold text-muted-foreground">
@@ -1923,7 +2048,7 @@ function PreciosEditor({
                   <Label className="text-xs">{label(k)}</Label>
                   <PrecioInput
                     value={precios[k] || 0}
-                    onCommit={(v) => onChange(k, v)}
+                    onCommit={(v) => onChange(k, v, { motivo, aplica })}
                   />
                 </div>
               ))}
@@ -1939,48 +2064,79 @@ function PreciosEditor({
                   <Label className="text-xs">{label(k)}</Label>
                   <PrecioInput
                     value={precios[k] || 0}
-                    onCommit={(v) => onChange(k, v)}
+                    onCommit={(v) => onChange(k, v, { motivo, aplica })}
                   />
                 </div>
               ))}
             </div>
           </div>
         </div>
+        {puedeVerHistorial && (
+          <div className="border-t pt-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 w-full justify-start text-xs text-muted-foreground"
+              onClick={() => setVerHistorial((v) => !v)}
+            >
+              <History className="mr-1 h-3.5 w-3.5" />
+              {verHistorial ? "Ocultar historial" : "Ver historial de precios"}
+            </Button>
+            {verHistorial && <HistorialPrecios />}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
 }
 
-// Cuadrícula de casillas para elegir qué secciones puede ver un admin. Se usa
-// tanto al crear un admin nuevo como al editar uno existente.
-function PermisosGrid({
-  seleccionados,
-  onToggle,
-}: {
-  seleccionados: Permiso[];
-  onToggle: (p: Permiso) => void;
-}) {
+// Historial de cambios de precio (permiso 'precios-historial'). Carga bajo
+// demanda al abrirse; más reciente primero.
+function HistorialPrecios() {
+  const [eventos, setEventos] = useState<PrecioEvento[] | null>(null);
+  useEffect(() => {
+    let vivo = true;
+    fetchHistorialPrecios({ limite: 50 })
+      .then((e) => vivo && setEventos(e))
+      .catch(() => vivo && setEventos([]));
+    return () => {
+      vivo = false;
+    };
+  }, []);
+  const label = (k: string) =>
+    (PRODUCTOS as Record<string, string>)[k] ??
+    (BALONES as Record<string, string>)[k] ??
+    k;
+  if (eventos == null)
+    return <p className="px-1 py-2 text-xs text-muted-foreground">Cargando…</p>;
+  if (eventos.length === 0)
+    return (
+      <p className="px-1 py-2 text-xs text-muted-foreground">
+        Aún no hay cambios de precio registrados.
+      </p>
+    );
   return (
-    <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-      {PERMISOS.map((p) => {
-        const activo = seleccionados.includes(p.id);
-        return (
-          <label
-            key={p.id}
-            className="flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-xs hover:bg-accent"
-          >
-            <input
-              type="checkbox"
-              checked={activo}
-              onChange={() => onToggle(p.id)}
-              className="h-3.5 w-3.5 accent-amber-500"
-            />
-            <span className={cn(!activo && "text-muted-foreground")}>
-              {p.label}
+    <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
+      {eventos.map((e) => (
+        <div key={e.id} className="rounded-md bg-muted/50 px-2 py-1 text-[11px]">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-semibold">{label(e.producto)}</span>
+            <span className="tabular-nums">
+              {e.precioAnterior != null ? soles(e.precioAnterior) : "—"} →{" "}
+              <b>{soles(e.precioNuevo)}</b>
             </span>
-          </label>
-        );
-      })}
+          </div>
+          <div className="flex items-center justify-between gap-2 text-muted-foreground">
+            <span>
+              {e.cambiadoPorNombre ?? "—"}
+              {e.aplica === "activo" ? " · aplicó ya" : " · próximo turno"}
+              {e.motivo ? ` · ${e.motivo}` : ""}
+            </span>
+            <span>{new Date(e.createdAt).toLocaleString("es-PE")}</span>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

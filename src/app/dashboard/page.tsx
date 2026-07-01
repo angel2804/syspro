@@ -27,11 +27,15 @@ import {
   PRODUCTO_COLOR,
   turnoLabel,
 } from "@/lib/config";
+import { toast } from "sonner";
 import { backupSiTurnoCompleto, upsertSesion } from "@/lib/db";
 import { sincronizarCreditosSesion } from "@/lib/data/creditos";
+import { subscribeNuevosPrecios } from "@/lib/data/precios";
 import { useStore } from "@/lib/store";
+import { useHydrated } from "@/lib/use-hydrated";
 import { logoutSupabase } from "@/lib/data/auth";
 import { calcularCuadre, preciosDe, soles } from "@/lib/calc";
+import { contarPorSeveridad, puedeCerrar, validarCierre } from "@/lib/domain/cierre";
 import { clientesOrdenados } from "@/lib/clientes";
 import type {
   Adelanto,
@@ -44,6 +48,7 @@ import type {
   Promocion,
   ProductoId,
 } from "@/lib/types";
+import { SyncBadge } from "@/components/sync-badge";
 import { RegistroModal } from "@/components/grifo/registro-modal";
 import { RegistroAddForm } from "@/components/grifo/registro-fields";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -94,13 +99,43 @@ export default function DashboardPage() {
   const clientes = useStore((s) => s.clientes);
   const store = useStore();
 
-  const [hydrated, setHydrated] = useState(false);
+  const hydrated = useHydrated();
   const [confirmandoCierre, setConfirmandoCierre] = useState(false);
-  useEffect(() => setHydrated(true), []);
   useEffect(() => {
     if (hydrated && !auth) router.replace("/");
     else if (hydrated && auth && !sesion) router.replace("/setup");
   }, [hydrated, auth, sesion, router]);
+
+  // Banner en vivo (Fase 5): si el admin cambia el precio de un producto de
+  // ESTA isla mientras el turno está abierto, se avisa con un toast que se
+  // autooculta. El turno NO se recalcula (conserva su precio congelado); el
+  // aviso es informativo para el próximo turno.
+  useEffect(() => {
+    if (!auth) return;
+    return subscribeNuevosPrecios((ev) => {
+      const s = useStore.getState().sesiones.find(
+        (x) => x.id === useStore.getState().currentSesionId
+      );
+      const isla = s ? getIsla(s.islaId) : undefined;
+      if (!isla) return;
+      const relevantes: string[] = [
+        ...isla.productos,
+        ...(isla.tipo === "glp" ? ["gasfull", "zetagas"] : []),
+      ];
+      if (!relevantes.includes(ev.producto)) return;
+      const nombre =
+        (PRODUCTOS as Record<string, string>)[ev.producto] ??
+        (BALONES as Record<string, string>)[ev.producto] ??
+        ev.producto;
+      toast.info(`Nuevo precio de ${nombre}: ${soles(ev.precioNuevo)}`, {
+        description:
+          ev.aplica === "activo"
+            ? "Aplica desde ahora. Tu turno actual conserva su precio; úsalo para nuevas ventas."
+            : "Regirá desde el próximo turno.",
+        duration: 8000,
+      });
+    });
+  }, [auth]);
 
   const isla = sesion ? getIsla(sesion.islaId) : undefined;
 
@@ -126,7 +161,15 @@ export default function DashboardPage() {
   const cuadre = calcularCuadre(sesion, precios);
   const esGlp = isla.tipo === "glp";
 
+  // Validación previa al cierre (Fase 5): los errores bloquean, los avisos solo
+  // advierten. El resumen del cuadre y esta lista se muestran en el modal.
+  const problemas = validarCierre(sesion);
+  const cierreBloqueado = !puedeCerrar(problemas);
+  const { errores, avisos } = contarPorSeveridad(problemas);
+
   async function finalizarTurno() {
+    // Belt-and-suspenders: nunca cerrar con errores aunque se fuerce el click.
+    if (!puedeCerrar(validarCierre(sesion!))) return;
     setConfirmandoCierre(false);
     cerrarSesion(sesion!.id);
     // Escribir el cierre a Firestore EXPLÍCITAMENTE aquí: el guardado
@@ -202,6 +245,7 @@ export default function DashboardPage() {
               ))}
           </div>
           <div className="flex items-center gap-2">
+            <SyncBadge />
             <ThemeToggle />
             <Button
               size="sm"
@@ -597,10 +641,73 @@ export default function DashboardPage() {
       </main>
 
       <Dialog open={confirmandoCierre} onOpenChange={setConfirmandoCierre}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>¿Finalizar y cerrar este turno?</DialogTitle>
+            <DialogTitle>
+              {cierreBloqueado
+                ? "Corrige antes de cerrar el turno"
+                : "¿Finalizar y cerrar este turno?"}
+            </DialogTitle>
           </DialogHeader>
+
+          {/* Problemas detectados (errores bloquean; avisos solo advierten) */}
+          {problemas.length > 0 && (
+            <div className="space-y-1.5">
+              {cierreBloqueado && (
+                <p className="text-sm font-semibold text-red-600">
+                  {errores} {errores === 1 ? "problema impide" : "problemas impiden"}{" "}
+                  cerrar el turno:
+                </p>
+              )}
+              <ul className="space-y-1 text-xs">
+                {problemas.map((p, i) => (
+                  <li
+                    key={i}
+                    className={cn(
+                      "flex items-start gap-1.5 rounded-md px-2 py-1",
+                      p.severidad === "error"
+                        ? "bg-red-500/10 text-red-700 dark:text-red-300"
+                        : "bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                    )}
+                  >
+                    <span>{p.severidad === "error" ? "⛔" : "⚠️"}</span>
+                    <span>{p.mensaje}</span>
+                  </li>
+                ))}
+              </ul>
+              {!cierreBloqueado && avisos > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Los avisos no impiden cerrar; revísalos por si acaso.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Resumen del cuadre */}
+          <div className="space-y-0.5 rounded-lg border bg-muted/40 p-3 text-xs">
+            <Linea label="Venta total" valor={soles(cuadre.ventaTotal)} bold />
+            <Linea label="− Créditos" valor={soles(cuadre.totalCreditos)} neg />
+            <Linea label="− Pagos electrónicos" valor={soles(cuadre.totalElectronico)} neg />
+            <div className="mt-1 flex items-center justify-between border-t pt-1">
+              <span className="font-semibold">Efectivo a entregar</span>
+              <span className="font-bold text-primary">
+                {soles(cuadre.efectivoAEntregar)}
+              </span>
+            </div>
+            <Linea label="Entregado al encargado" valor={soles(cuadre.totalEntregado)} />
+            <div className="flex items-center justify-between">
+              <span className="font-semibold">Saldo pendiente</span>
+              <span
+                className={cn(
+                  "font-bold",
+                  cuadre.saldoPendiente > 0.001 ? "text-amber-600" : "text-green-600"
+                )}
+              >
+                {soles(cuadre.saldoPendiente)}
+              </span>
+            </div>
+          </div>
+
           <p className="text-sm text-muted-foreground">
             No podrás seguir editando este turno desde este dispositivo después
             de cerrarlo.
@@ -609,7 +716,9 @@ export default function DashboardPage() {
             <Button variant="outline" onClick={() => setConfirmandoCierre(false)}>
               Cancelar
             </Button>
-            <Button onClick={finalizarTurno}>Finalizar turno</Button>
+            <Button onClick={finalizarTurno} disabled={cierreBloqueado}>
+              Finalizar turno
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

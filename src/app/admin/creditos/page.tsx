@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeft, Download, GitMerge, Plus, Search, Users } from "lucide-react";
+import { ArrowLeft, Download, FileText, GitMerge, Plus, Search, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +46,7 @@ import {
   type EstadoCliente,
 } from "@/lib/domain/cuenta-corriente";
 import { resolverCliente, type AliasRef, type ClienteRef } from "@/lib/domain/clientes";
+import { imprimirEstadoCuenta } from "@/lib/pdf";
 import {
   aClienteRef,
   crearCliente,
@@ -369,6 +370,19 @@ function DetalleCliente({
     URL.revokeObjectURL(url);
   }
 
+  function exportarPDF() {
+    if (!detalle) return;
+    const ok = imprimirEstadoCuenta({
+      nombreCliente: cliente.nombre,
+      filas: filasFiltradas,
+      resumen: detalle.resumen,
+      rango: { desde: desde || undefined, hasta: hasta || undefined },
+    });
+    if (!ok) {
+      toast.error("El navegador bloqueó la ventana. Permite las ventanas emergentes para generar el PDF.");
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="rounded-lg border p-4">
@@ -384,7 +398,10 @@ function DetalleCliente({
             />
             <FusionarDialog cliente={cliente} clientes={clientes} onListo={onCambio} />
             <Button variant="outline" size="sm" onClick={exportar} disabled={!detalle}>
-              <Download className="size-4" /> Exportar
+              <Download className="size-4" /> CSV
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportarPDF} disabled={!detalle}>
+              <FileText className="size-4" /> PDF
             </Button>
           </div>
         </div>

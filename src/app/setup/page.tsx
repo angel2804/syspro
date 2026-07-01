@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { ISLAS, TURNOS } from "@/lib/config";
 import { useStore } from "@/lib/store";
+import { useHydrated } from "@/lib/use-hydrated";
 import { logoutSupabase } from "@/lib/data/auth";
 import { getSesion } from "@/lib/db";
 import {
@@ -34,12 +35,11 @@ export default function SetupPage() {
   const logout = useStore((s) => s.logout);
 
   const [sel, setSel] = useState<{ islaId: string; turno: TurnoId } | null>(null);
-  const [hydrated, setHydrated] = useState(false);
+  const hydrated = useHydrated();
   const [verificando, setVerificando] = useState(false);
   // Cuadro de confirmación: el trabajador debe re-confirmar en qué isla está
   // físicamente antes de arrancar, para no repetir el error de elegir mal.
   const [confirmandoIsla, setConfirmandoIsla] = useState(false);
-  useEffect(() => setHydrated(true), []);
 
   // Día operativo "activo" del sistema: no depende del reloj, depende de
   // qué día más antiguo todavía no completó sus 9 turnos en los reportes.

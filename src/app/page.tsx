@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useHydrated } from "@/lib/use-hydrated";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,7 +63,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [pass, setPass] = useState("");
   const [cargando, setCargando] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
+  const hydrated = useHydrated();
   // Flujo trabajador: primero login de la cuenta COMPARTIDA, luego elegir nombre.
   const [temail, setTemail] = useState("");
   const [tpass, setTpass] = useState("");
@@ -75,19 +76,18 @@ export default function LoginPage() {
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
-    setHydrated(true);
     // La intro completa se ve una sola vez por sesión del navegador.
     const yaVista =
       typeof window !== "undefined" &&
       sessionStorage.getItem("gs-intro-seen") === "1";
     if (yaVista) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFase("ready");
       return;
     }
     const t = timers.current;
     t.push(setTimeout(() => terminarCarga(), LOAD_MS));
     return () => t.forEach(clearTimeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Pasa de la pantalla de carga al login con un destello + zoom.
@@ -705,6 +705,9 @@ function Decoraciones() {
     { left: number; top: number; size: number; dur: number; delay: number; op: number }[]
   >([]);
   useEffect(() => {
+    // Se generan en el cliente al montar (usan Math.random): así no hay
+    // desajuste de hidratación servidor↔cliente. Es intencional, una sola vez.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setParticulas(
       Array.from({ length: 22 }, () => ({
         left: Math.random() * 100,
