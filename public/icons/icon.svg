@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="GrifoSys">
+  <rect width="512" height="512" rx="96" fill="#0b0f19"/>
+  <!-- surtidor estilizado -->
+  <g fill="none" stroke="#38bdf8" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="150" y="120" width="150" height="272" rx="20" fill="#0ea5e9" fill-opacity="0.12"/>
+    <line x1="186" y1="176" x2="264" y2="176"/>
+    <line x1="186" y1="224" x2="264" y2="224"/>
+    <path d="M300 200 h40 a24 24 0 0 1 24 24 v110 a26 26 0 0 0 52 0 v-150 l-40 -40"/>
+  </g>
+  <text x="225" y="470" font-family="Segoe UI, Arial, sans-serif" font-size="92" font-weight="700" fill="#e2e8f0" text-anchor="middle">G</text>
+</svg>

@@ -1,0 +1,558 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* ===========================================================================
+   Paleta de marca GrifoSys — "premium SaaS 2026".
+   Marca: ámbar/naranja cálido sobre superficies slate de tinte frío.
+   Todo pasa por tokens: cambiar la marca = cambiar estas variables.
+   =========================================================================== */
+:root {
+  /* Superficies: blanco cálido casi imperceptible, texto slate profundo */
+  --background: oklch(0.984 0.003 95);
+  --foreground: oklch(0.22 0.03 260);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.22 0.03 260);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.22 0.03 260);
+
+  /* Marca: ámbar/naranja intenso, texto blanco encima */
+  --primary: oklch(0.69 0.18 53);
+  --primary-foreground: oklch(0.99 0.01 90);
+
+  /* Secundario / muted: slate frío suave */
+  --secondary: oklch(0.965 0.006 250);
+  --secondary-foreground: oklch(0.3 0.03 260);
+  --muted: oklch(0.965 0.006 250);
+  --muted-foreground: oklch(0.52 0.02 258);
+
+  /* Acento: tinte ámbar muy claro para hovers/selección */
+  --accent: oklch(0.95 0.03 75);
+  --accent-foreground: oklch(0.42 0.13 55);
+
+  --destructive: oklch(0.585 0.22 25);
+  --border: oklch(0.9 0.006 255);
+  --input: oklch(0.9 0.006 255);
+  --ring: oklch(0.69 0.18 53);
+
+  /* Paleta categórica real (gráficos / estados) */
+  --chart-1: oklch(0.69 0.18 53);   /* ámbar marca */
+  --chart-2: oklch(0.62 0.13 230);  /* azul */
+  --chart-3: oklch(0.6 0.15 150);   /* verde */
+  --chart-4: oklch(0.58 0.2 300);   /* violeta */
+  --chart-5: oklch(0.65 0.2 350);   /* rosa */
+
+  --radius: 0.7rem;
+
+  --sidebar: oklch(0.995 0.002 95);
+  --sidebar-foreground: oklch(0.22 0.03 260);
+  --sidebar-primary: oklch(0.69 0.18 53);
+  --sidebar-primary-foreground: oklch(0.99 0.01 90);
+  --sidebar-accent: oklch(0.95 0.03 75);
+  --sidebar-accent-foreground: oklch(0.42 0.13 55);
+  --sidebar-border: oklch(0.9 0.006 255);
+  --sidebar-ring: oklch(0.69 0.18 53);
+}
+
+.dark {
+  /* Slate profundo de tinte frío (no negro puro) */
+  --background: oklch(0.19 0.022 260);
+  --foreground: oklch(0.96 0.006 250);
+  --card: oklch(0.235 0.024 260);
+  --card-foreground: oklch(0.96 0.006 250);
+  --popover: oklch(0.235 0.024 260);
+  --popover-foreground: oklch(0.96 0.006 250);
+
+  /* Ámbar algo más luminoso para brillar sobre fondo oscuro */
+  --primary: oklch(0.76 0.16 62);
+  --primary-foreground: oklch(0.2 0.03 260);
+
+  --secondary: oklch(0.3 0.022 260);
+  --secondary-foreground: oklch(0.96 0.006 250);
+  --muted: oklch(0.3 0.022 260);
+  --muted-foreground: oklch(0.72 0.02 258);
+
+  --accent: oklch(0.34 0.05 62);
+  --accent-foreground: oklch(0.9 0.07 75);
+
+  --destructive: oklch(0.7 0.19 22);
+  --border: oklch(1 0 0 / 9%);
+  --input: oklch(1 0 0 / 13%);
+  --ring: oklch(0.76 0.16 62);
+
+  --chart-1: oklch(0.76 0.16 62);
+  --chart-2: oklch(0.7 0.13 230);
+  --chart-3: oklch(0.7 0.15 150);
+  --chart-4: oklch(0.68 0.18 300);
+  --chart-5: oklch(0.72 0.18 350);
+
+  --sidebar: oklch(0.225 0.024 260);
+  --sidebar-foreground: oklch(0.96 0.006 250);
+  --sidebar-primary: oklch(0.76 0.16 62);
+  --sidebar-primary-foreground: oklch(0.2 0.03 260);
+  --sidebar-accent: oklch(0.34 0.05 62);
+  --sidebar-accent-foreground: oklch(0.9 0.07 75);
+  --sidebar-border: oklch(1 0 0 / 9%);
+  --sidebar-ring: oklch(0.76 0.16 62);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+/* ===========================================================================
+   Animaciones y utilidades de diseño (look moderno, sin mover nada de sitio).
+   Solo añaden movimiento/realce; no cambian la disposición de los elementos.
+   =========================================================================== */
+
+@keyframes gs-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes gs-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gs-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes gs-pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgb(245 158 11 / 0.45); }
+  70% { box-shadow: 0 0 0 8px rgb(245 158 11 / 0); }
+  100% { box-shadow: 0 0 0 0 rgb(245 158 11 / 0); }
+}
+
+@keyframes gs-marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+@layer utilities {
+  .animate-float { animation: gs-float 4s ease-in-out infinite; }
+  .animate-fade-up { animation: gs-fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .animate-pulse-ring { animation: gs-pulse-ring 2s ease-out infinite; }
+
+  /* Texto con degradado animado (encabezados destacados) */
+  .text-gradient {
+    background: linear-gradient(90deg, #f59e0b, #f97316, #f59e0b);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: gs-shimmer 4s linear infinite;
+  }
+
+  /* Tarjeta con elevación suave al pasar el mouse */
+  .card-lift {
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .card-lift:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 30px -12px rgb(0 0 0 / 0.35);
+  }
+
+  /* Cinta de recordatorio en movimiento continuo */
+  .marquee-track {
+    display: inline-flex;
+    white-space: nowrap;
+    animation: gs-marquee 22s linear infinite;
+  }
+
+  /* Barra superior premium: gradiente slate profundo con realce sutil */
+  .gs-topbar {
+    background: linear-gradient(
+      180deg,
+      oklch(0.26 0.026 260),
+      oklch(0.2 0.022 260)
+    );
+    box-shadow: 0 1px 0 0 rgb(255 255 255 / 0.06) inset,
+      0 8px 24px -16px rgb(0 0 0 / 0.6);
+  }
+
+  /* Tarjeta con borde luminoso al pasar el mouse (acción/selección) */
+  .gs-card {
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 0.22s ease, border-color 0.22s ease;
+  }
+  .gs-card:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in oklch, var(--primary), transparent 55%);
+    box-shadow: 0 10px 30px -16px rgb(0 0 0 / 0.45);
+  }
+
+  /* Encabezado de sección con barra de acento ámbar a la izquierda */
+  .gs-section-bar {
+    background: linear-gradient(
+      90deg,
+      color-mix(in oklch, var(--primary), transparent 88%),
+      transparent 55%
+    );
+    border-left: 3px solid var(--primary);
+  }
+
+  /* Realce de "chip" con vidrio sutil */
+  .gs-chip {
+    background: color-mix(in oklch, var(--card), transparent 30%);
+    backdrop-filter: blur(6px);
+  }
+}
+
+/* ===========================================================================
+   Login premium: intro de carga + aparición + efectos continuos.
+   Solo añade movimiento/realce; la lógica de login no cambia.
+   =========================================================================== */
+
+@keyframes gs-logo-pop {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes gs-logo-glow {
+  0%, 100% {
+    box-shadow: 0 0 26px 4px rgb(245 158 11 / 0.45),
+      0 0 52px 14px rgb(34 197 94 / 0.16);
+  }
+  50% {
+    box-shadow: 0 0 40px 9px rgb(245 158 11 / 0.7),
+      0 0 70px 20px rgb(34 197 94 / 0.3);
+  }
+}
+@keyframes gs-progress { from { width: 0%; } to { width: 100%; } }
+@keyframes gs-progress-shine {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(420%); }
+}
+@keyframes gs-dot { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+@keyframes gs-flash { 0% { opacity: 0; } 35% { opacity: 0.9; } 100% { opacity: 0; } }
+@keyframes gs-zoom-in { from { transform: scale(1.1); } to { transform: scale(1); } }
+@keyframes gs-letter {
+  from { opacity: 0; transform: translateY(0.45em) rotateX(45deg); filter: blur(4px); }
+  to { opacity: 1; transform: none; filter: blur(0); }
+}
+@keyframes gs-slide-in-left {
+  0% { opacity: 0; transform: translateX(-44px); }
+  70% { transform: translateX(7px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes gs-slide-in-right {
+  0% { opacity: 0; transform: translateX(44px); }
+  70% { transform: translateX(-7px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes gs-particle-rise {
+  0% { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
+  12% { opacity: var(--p-op, 0.5); }
+  88% { opacity: var(--p-op, 0.5); }
+  100% { transform: translateY(-130px) translateX(18px) scale(0.4); opacity: 0; }
+}
+@keyframes gs-drift {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(36px, 26px); }
+}
+@keyframes gs-border-sweep { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
+@keyframes gs-ripple { to { transform: scale(4); opacity: 0; } }
+
+@layer utilities {
+  .animate-logo-pop { animation: gs-logo-pop 0.8s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .animate-logo-glow { animation: gs-logo-glow 3s ease-in-out infinite; }
+  .animate-zoom-in { animation: gs-zoom-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .animate-slide-in-left { animation: gs-slide-in-left 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+  .animate-slide-in-right { animation: gs-slide-in-right 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+  .animate-drift { animation: gs-drift 18s ease-in-out infinite; }
+
+  /* Letra de un título que aparece una a una */
+  .gs-letter { display: inline-block; animation: gs-letter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; white-space: pre; }
+
+  /* Punto animado de "Iniciando sistema..." */
+  .gs-dot { animation: gs-dot 1.4s ease-in-out infinite; }
+
+  /* Barra de carga: relleno + brillo que la recorre */
+  .gs-progress-fill { animation: gs-progress var(--gs-load, 3.2s) cubic-bezier(0.45, 0, 0.2, 1) forwards; }
+  .gs-progress-shine {
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.85), transparent);
+    animation: gs-progress-shine 1.1s ease-in-out infinite;
+  }
+
+  /* Destello de transición al terminar la carga */
+  .gs-flash {
+    background: radial-gradient(circle at center, rgb(255 255 255 / 0.9), rgb(245 158 11 / 0.35) 40%, transparent 70%);
+    animation: gs-flash 0.6s ease-out forwards;
+  }
+
+  /* Partícula luminosa flotante */
+  .gs-particle {
+    position: absolute;
+    border-radius: 9999px;
+    background: radial-gradient(circle, rgb(245 158 11 / 0.9), transparent 70%);
+    animation: gs-particle-rise linear infinite;
+  }
+
+  /* Borde iluminado que recorre la tarjeta de login */
+  .gs-glow-border {
+    position: relative;
+    background-clip: padding-box;
+  }
+  .gs-glow-border::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(115deg,
+      rgb(245 158 11 / 0.7), rgb(34 197 94 / 0.25), transparent 45%,
+      rgb(56 189 248 / 0.35), rgb(245 158 11 / 0.7));
+    background-size: 200% 200%;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: gs-border-sweep 6s linear infinite;
+    pointer-events: none;
+  }
+
+  /* Anfitrión de efecto ripple al hacer click */
+  .gs-ripple-host { position: relative; overflow: hidden; }
+  .gs-ripple {
+    position: absolute;
+    border-radius: 9999px;
+    background: rgb(255 255 255 / 0.35);
+    transform: scale(0);
+    animation: gs-ripple 0.6s ease-out forwards;
+    pointer-events: none;
+  }
+}
+
+/* ===========================================================================
+   DevLens · Login v2 — capa visual premium (verde tecnológico).
+   Solo estilo/movimiento; NO altera ninguna lógica del login.
+   =========================================================================== */
+@keyframes dl-flow { to { stroke-dashoffset: -1200; } }
+@keyframes dl-logo-glow {
+  0%, 100% {
+    box-shadow: 0 0 24px 2px rgb(16 185 129 / 0.45),
+      0 0 60px 14px rgb(16 185 129 / 0.16);
+  }
+  50% {
+    box-shadow: 0 0 42px 8px rgb(16 185 129 / 0.7),
+      0 0 84px 24px rgb(16 185 129 / 0.32);
+  }
+}
+@keyframes dl-particle-rise {
+  0% { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
+  12% { opacity: var(--p-op, 0.5); }
+  86% { opacity: var(--p-op, 0.5); }
+  100% { transform: translateY(-170px) translateX(16px) scale(0.3); opacity: 0; }
+}
+@keyframes dl-breathe {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.06); }
+}
+
+@layer utilities {
+  /* Texto con degradado verde animado */
+  .dl-text-gradient {
+    background: linear-gradient(90deg, #34d399, #10b981, #6ee7b7, #10b981);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: gs-shimmer 5s linear infinite;
+  }
+  .dl-logo-glow { animation: dl-logo-glow 3.6s ease-in-out infinite; }
+  .dl-breathe { animation: dl-breathe 6s ease-in-out infinite; }
+
+  /* Líneas tecnológicas que fluyen (SVG) */
+  .dl-flow { stroke-dasharray: 5 16; animation: dl-flow 16s linear infinite; }
+
+  /* Partícula verde flotante */
+  .dl-particle {
+    position: absolute;
+    border-radius: 9999px;
+    background: radial-gradient(circle, rgb(52 211 153 / 0.95), transparent 70%);
+    animation: dl-particle-rise linear infinite;
+  }
+
+  /* Borde iluminado verde/teal que recorre la tarjeta */
+  .dl-glow-border { position: relative; background-clip: padding-box; }
+  .dl-glow-border::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg,
+      rgb(16 185 129 / 0.85), rgb(45 212 191 / 0.3) 35%, transparent 55%,
+      rgb(56 189 248 / 0.28), rgb(16 185 129 / 0.75));
+    background-size: 200% 200%;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: gs-border-sweep 7s linear infinite;
+    pointer-events: none;
+  }
+
+  /* Cuadrícula tenue de fondo con desvanecido radial */
+  .dl-grid {
+    background-image:
+      linear-gradient(rgb(16 185 129 / 0.055) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(16 185 129 / 0.055) 1px, transparent 1px);
+    background-size: 46px 46px;
+    -webkit-mask-image: radial-gradient(ellipse at 28% 42%, #000 0%, transparent 72%);
+    mask-image: radial-gradient(ellipse at 28% 42%, #000 0%, transparent 72%);
+  }
+
+  /* Destello de transición verde */
+  .dl-flash {
+    background: radial-gradient(circle at center, rgb(255 255 255 / 0.85),
+      rgb(16 185 129 / 0.35) 40%, transparent 70%);
+    animation: gs-flash 0.6s ease-out forwards;
+  }
+}
+/* --- Auroras verdes: ondas luminosas lentas detrás del login --------------
+   Solo transform/opacity (aceleradas por GPU) sobre 3 capas con blur; bajo
+   costo y movimiento orgánico infinito. */
+@keyframes dl-aurora-a {
+  0%, 100% { transform: translate3d(-16%, 0, 0) scaleX(1) rotate(-7deg); }
+  50% { transform: translate3d(14%, -7%, 0) scaleX(1.3) rotate(6deg); }
+}
+@keyframes dl-aurora-b {
+  0%, 100% { transform: translate3d(12%, 5%, 0) scaleX(1.15) rotate(5deg); }
+  50% { transform: translate3d(-14%, -3%, 0) scaleX(0.85) rotate(-6deg); }
+}
+@keyframes dl-aurora-c {
+  0%, 100% { transform: translate3d(-10%, 8%, 0) rotate(3deg); opacity: 0.22; }
+  50% { transform: translate3d(13%, -5%, 0) rotate(-3deg); opacity: 0.42; }
+}
+@keyframes dl-drift-soft {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(10px, -16px); }
+}
+
+@layer utilities {
+  .dl-aurora {
+    position: absolute;
+    inset: -22% -12%;
+    pointer-events: none;
+    filter: blur(72px);
+    mix-blend-mode: screen;
+    opacity: 0.18;
+  }
+  .dl-aurora > span {
+    position: absolute;
+    inset: 0;
+    will-change: transform, opacity;
+  }
+  .dl-aurora-1 {
+    background: linear-gradient(100deg, transparent 20%,
+      rgb(16 185 129 / 0.5) 45%, rgb(52 211 153 / 0.4) 60%, transparent 80%);
+    animation: dl-aurora-a 19s ease-in-out infinite;
+  }
+  .dl-aurora-2 {
+    background: linear-gradient(80deg, transparent 25%,
+      rgb(13 148 136 / 0.42) 50%, rgb(16 185 129 / 0.3) 65%, transparent 85%);
+    animation: dl-aurora-b 26s ease-in-out infinite;
+  }
+  .dl-aurora-3 {
+    background: radial-gradient(45% 60% at 60% 45%,
+      rgb(52 211 153 / 0.4), transparent 70%);
+    animation: dl-aurora-c 22s ease-in-out infinite;
+  }
+  .dl-drift-soft { animation: dl-drift-soft 16s ease-in-out infinite; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dl-logo-glow, .dl-flow, .dl-particle, .dl-text-gradient,
+  .dl-breathe, .dl-glow-border::before,
+  .dl-aurora-1, .dl-aurora-2, .dl-aurora-3, .dl-drift-soft {
+    animation: none;
+  }
+}
+
+/* Transición suave al alternar tema (claro ↔ oscuro). Se desactiva durante
+   el cambio explícito para evitar arrastres raros en elementos puntuales. */
+@media (prefers-reduced-motion: no-preference) {
+  :root,
+  .dark {
+    --gs-theme-transition: background-color 0.35s ease, border-color 0.35s ease,
+      color 0.35s ease;
+  }
+  body,
+  .gs-topbar,
+  [data-slot="card"] {
+    transition: var(--gs-theme-transition);
+  }
+}
+
+/* Respeta usuarios que prefieren menos movimiento */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-pulse-ring,
+  .text-gradient,
+  .marquee-track,
+  .animate-logo-glow,
+  .animate-drift,
+  .gs-particle,
+  .gs-dot,
+  .gs-progress-shine,
+  .gs-glow-border::before {
+    animation: none;
+  }
+}
