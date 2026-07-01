@@ -56,7 +56,7 @@ export function PWA() {
     <>
       {!online && (
         <div className="fixed inset-x-0 top-0 z-50 bg-amber-500 px-3 py-1 text-center text-xs font-medium text-amber-950">
-          Sin conexión — los cambios se sincronizarán al reconectar
+          Sin conexión — el turno activo quedará pendiente hasta reconectar
         </div>
       )}
       {deferred && (

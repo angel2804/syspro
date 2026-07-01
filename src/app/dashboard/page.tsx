@@ -34,6 +34,7 @@ import { subscribeNuevosPrecios } from "@/lib/data/precios";
 import { useStore } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
 import { logoutSupabase } from "@/lib/data/auth";
+import { guardarSesionPendiente, limpiarSesionPendiente } from "@/lib/offline-sesion";
 import { calcularCuadre, preciosDe, soles } from "@/lib/calc";
 import { contarPorSeveridad, puedeCerrar, validarCierre } from "@/lib/domain/cierre";
 import { clientesOrdenados } from "@/lib/clientes";
@@ -105,6 +106,7 @@ export default function DashboardPage() {
 
   const hydrated = useHydrated();
   const [confirmandoCierre, setConfirmandoCierre] = useState(false);
+  const [finalizandoCierre, setFinalizandoCierre] = useState(false);
   useEffect(() => {
     if (hydrated && !auth) router.replace("/");
     else if (hydrated && auth && !sesion) {
@@ -194,7 +196,7 @@ export default function DashboardPage() {
   async function finalizarTurno() {
     // Belt-and-suspenders: nunca cerrar con errores aunque se fuerce el click.
     if (!puedeCerrar(validarCierre(sesion!))) return;
-    setConfirmandoCierre(false);
+    setFinalizandoCierre(true);
     cerrarSesion(sesion!.id);
     // Escribir el cierre a Firestore EXPLÍCITAMENTE aquí: el guardado
     // automático solo escribe el turno activo, y al limpiar currentSesionId
@@ -204,17 +206,42 @@ export default function DashboardPage() {
       .sesiones.find((s) => s.id === sesion!.id);
     if (cerrada) {
       try {
+        useStore.getState().setSync({ estado: "guardando" });
         await upsertSesion(cerrada);
+        limpiarSesionPendiente(cerrada.id);
         // Volcar los créditos del turno (ya definitivos) a la cuenta corriente
         // por cliente, con el precio del turno congelado. No afecta el cuadre.
         await sincronizarCreditosSesion(cerrada);
         // Si con este cierre el turno quedó completo (las 3 islas cerradas),
         // se crea una copia de seguridad automática de ese turno.
         await backupSiTurnoCompleto(cerrada.diaOperativo, cerrada.turno);
+        useStore
+          .getState()
+          .setSync({ estado: "guardado", ultimoGuardado: Date.now() });
       } catch (e) {
         console.error("No se pudo guardar el cierre del turno:", e);
+        const mensaje =
+          e instanceof Error ? e.message : "Revisa internet y vuelve a intentar.";
+        const esValidacion =
+          mensaje.includes("Vale duplicado") || mensaje.includes("Ya existe");
+        if (esValidacion) {
+          useStore.getState().setSync({ estado: "pendiente" });
+        } else {
+          guardarSesionPendiente(cerrada);
+          useStore.getState().setSync({ estado: "sinConexion" });
+        }
+        toast.error("No se pudo cerrar el turno", {
+          description: esValidacion
+            ? mensaje
+            : "El turno queda en esta pantalla. Revisa internet y vuelve a intentar.",
+          duration: 8000,
+        });
+        setFinalizandoCierre(false);
+        return;
       }
     }
+    setFinalizandoCierre(false);
+    setConfirmandoCierre(false);
     setCurrentSesion(null);
     router.push("/setup");
   }
@@ -738,11 +765,18 @@ export default function DashboardPage() {
             de cerrarlo.
           </p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmandoCierre(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setConfirmandoCierre(false)}
+              disabled={finalizandoCierre}
+            >
               Cancelar
             </Button>
-            <Button onClick={finalizarTurno} disabled={cierreBloqueado}>
-              Finalizar turno
+            <Button
+              onClick={finalizarTurno}
+              disabled={cierreBloqueado || finalizandoCierre}
+            >
+              {finalizandoCierre ? "Guardando..." : "Finalizar turno"}
             </Button>
           </DialogFooter>
         </DialogContent>

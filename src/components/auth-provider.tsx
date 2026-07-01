@@ -51,10 +51,17 @@ export function AuthProvider() {
 
     reconciliar();
 
-    const { data: sub } = sb.auth.onAuthStateChange((event) => {
+    const { data: sub } = sb.auth.onAuthStateChange((event, session) => {
       if (event === "SIGNED_OUT") {
         if (vivo) logout();
       } else if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        if (
+          event === "SIGNED_IN" &&
+          session?.user.id &&
+          useStore.getState().auth?.userId === session.user.id
+        ) {
+          return;
+        }
         reconciliar();
       }
     });

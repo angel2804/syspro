@@ -98,6 +98,38 @@ function pagoDeFila(r: FilaPago): PagoCC {
   };
 }
 
+async function assertValeUnicoActivo(input: {
+  clienteId: string;
+  vale: string;
+  diaOperativo?: string;
+  turno?: string;
+  origenId?: string;
+}): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  let q = sb
+    .from("creditos")
+    .select("id, origen_id")
+    .eq("cliente_id", input.clienteId)
+    .eq("vale", input.vale.trim())
+    .eq("estado", "activo")
+    .limit(5);
+  if (input.diaOperativo) q = q.eq("dia_operativo", input.diaOperativo);
+  if (input.turno) q = q.eq("turno", input.turno);
+  const { data, error } = await q;
+  if (error) throw error;
+  const duplicados = ((data ?? []) as { id: string; origen_id: string | null }[]).filter(
+    (r) => !input.origenId || r.origen_id !== input.origenId
+  );
+  if (duplicados.length > 0) {
+    throw new Error(
+      input.diaOperativo && input.turno
+        ? "Ya existe un crédito activo con ese vale para este cliente, día y turno"
+        : "Ya existe un crédito activo con ese vale para este cliente"
+    );
+  }
+}
+
 // ----- Lecturas -------------------------------------------------------------
 
 export async function fetchCreditos(clienteId?: string): Promise<CreditoCC[]> {
@@ -183,6 +215,12 @@ export async function crearCredito(c: NuevoCredito): Promise<void> {
   if (!sb) throw new Error("Sin conexión a la base de datos");
   if (!c.vale?.trim()) throw new Error("El vale es obligatorio");
   if (!(c.galones > 0)) throw new Error("Los galones deben ser mayores a 0");
+  await assertValeUnicoActivo({
+    clienteId: c.clienteId,
+    vale: c.vale,
+    diaOperativo: c.diaOperativo,
+    turno: c.turno,
+  });
   const total = redondear(c.galones * c.precioUnitario);
   const { error } = await sb.from("creditos").insert({
     cliente_id: c.clienteId,
@@ -286,6 +324,7 @@ export async function sincronizarCreditosSesion(s: Sesion): Promise<number> {
   const precios: Precios = preciosDe(s, PRECIOS_DEFAULT);
   const fecha = s.closedAt ?? s.updatedAt ?? Date.now();
   const presentes = new Set<string>();
+  const valesDelTurno = new Set<string>();
   let n = 0;
 
   for (const c of lista) {
@@ -302,6 +341,20 @@ export async function sincronizarCreditosSesion(s: Sesion): Promise<number> {
         estado: "pendiente",
       });
     }
+    const valeKey = `${clienteId}|${normalizar(c.vale)}|${s.diaOperativo}|${s.turno}`;
+    if (valesDelTurno.has(valeKey)) {
+      throw new Error(
+        `Vale duplicado en el turno: ${c.vale} para ${c.cliente}. Corrige antes de cerrar.`
+      );
+    }
+    valesDelTurno.add(valeKey);
+    await assertValeUnicoActivo({
+      clienteId,
+      vale: c.vale,
+      diaOperativo: s.diaOperativo,
+      turno: s.turno,
+      origenId,
+    });
     const precioUnitario = precios[c.producto] ?? 0;
     const total = redondear(c.galones * precioUnitario);
     const { error } = await sb.from("creditos").upsert(

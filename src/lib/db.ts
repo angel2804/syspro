@@ -126,6 +126,7 @@ export async function resetPruebasCompleto(): Promise<void> {
   // La lista de autocompletado de clientes (config/clientes) también se vacía;
   // precios, trabajadores y logo se conservan.
   await setConfig("clientes", { nombres: [] });
+  await setConfig("clientes_descuento", { nombres: [] });
 }
 
 // Suscripción en vivo a una ventana de días. Trae el estado inicial y luego

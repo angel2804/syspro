@@ -140,17 +140,17 @@ export default function CreditosPage() {
   const [selId, setSelId] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<EstadoCuentaCliente | null>(null);
 
-  const recargarListado = useCallback(async () => {
-    setCargando(true);
+  const recargarListado = useCallback(async (silencioso = false) => {
+    if (!silencioso) setCargando(true);
     try {
       const [cs, ss, al] = await Promise.all([fetchClientes(), fetchSaldos(), fetchAlias()]);
       setClientes(cs);
       setSaldos(ss);
       setAlias(al);
     } catch (e) {
-      toast.error("No se pudo cargar: " + (e as Error).message);
+      if (!silencioso) toast.error("No se pudo cargar: " + (e as Error).message);
     } finally {
-      setCargando(false);
+      if (!silencioso) setCargando(false);
     }
   }, []);
 
@@ -175,6 +175,15 @@ export default function CreditosPage() {
     if (selId) recargarDetalle(selId);
     else setDetalle(null);
   }, [selId, recargarDetalle]);
+
+  useEffect(() => {
+    const poll = setInterval(() => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      void recargarListado(true);
+      if (selId) void recargarDetalle(selId);
+    }, 3000);
+    return () => clearInterval(poll);
+  }, [recargarListado, recargarDetalle, selId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const saldoPorId = useMemo(() => {

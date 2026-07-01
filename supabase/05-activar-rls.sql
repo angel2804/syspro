@@ -131,10 +131,10 @@ create policy backups_all on public.backups
 drop policy if exists config_clientes_ins on public.config;
 drop policy if exists config_clientes_upd on public.config;
 create policy config_clientes_ins on public.config
-  for insert with check (key = 'clientes' and public.esta_autenticado());
+  for insert with check (key in ('clientes', 'clientes_descuento') and public.esta_autenticado());
 create policy config_clientes_upd on public.config
-  for update using (key = 'clientes' and public.esta_autenticado())
-  with check (key = 'clientes' and public.esta_autenticado());
+  for update using (key in ('clientes', 'clientes_descuento') and public.esta_autenticado())
+  with check (key in ('clientes', 'clientes_descuento') and public.esta_autenticado());
 
 -- profiles / sesiones: se conservan las políticas del schema.sql
 --   * profiles: cada quien ve/edita lo suyo + es_admin; la gestión de usuarios

@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import { toast } from "sonner";
 import { useStore } from "@/lib/store";
 import { diaMenos, diaOperativoActual } from "@/lib/calc";
 import {
@@ -13,6 +12,11 @@ import {
   upsertSesion,
 } from "@/lib/db";
 import { normalizarCliente } from "@/lib/clientes";
+import {
+  guardarSesionPendiente,
+  leerSesionPendiente,
+  limpiarSesionPendiente,
+} from "@/lib/offline-sesion";
 import { supabaseHabilitado } from "@/lib/supabase";
 import type { Admin, Precios, Sesion } from "@/lib/types";
 
@@ -33,6 +37,21 @@ export function SupabaseSync() {
   const setClientesDescuento = useStore((s) => s.setClientesDescuento);
   const setAdmins = useStore((s) => s.setAdmins);
   const setLogo = useStore((s) => s.setLogo);
+
+  useEffect(() => {
+    if (!auth?.userId) return;
+    const pendiente = leerSesionPendiente();
+    if (!pendiente) return;
+    useStore.setState((st) => {
+      const existe = st.sesiones.some((s) => s.id === pendiente.id);
+      return {
+        sesiones: existe
+          ? st.sesiones.map((s) => (s.id === pendiente.id ? pendiente : s))
+          : [...st.sesiones, pendiente],
+        sync: { ...st.sync, estado: "pendiente" },
+      };
+    });
+  }, [auth?.userId]);
 
   // Precios globales en vivo (config/precios)
   useEffect(() => {
@@ -158,7 +177,6 @@ export function SupabaseSync() {
       if (primera) {
         primera = false;
         useStore.getState().setSync({ estado: "conectado" });
-        toast.success("Conectado a Supabase", { duration: 2000 });
       }
     };
 
@@ -184,7 +202,10 @@ export function SupabaseSync() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const onOffline = () => useStore.getState().setSync({ estado: "sinConexion" });
-    const onOnline = () => useStore.getState().setSync({ estado: "conectado" });
+    const onOnline = () =>
+      useStore
+        .getState()
+        .setSync({ estado: leerSesionPendiente() ? "pendiente" : "conectado" });
     window.addEventListener("offline", onOffline);
     window.addEventListener("online", onOnline);
     if (!navigator.onLine) onOffline();
@@ -207,13 +228,20 @@ export function SupabaseSync() {
       if (!s) return;
       const json = JSON.stringify(s);
       if (json === ultimoJson) return;
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        guardarSesionPendiente(s);
+        setSync({ estado: "sinConexion" });
+        return;
+      }
       setSync({ estado: "guardando" });
       try {
         await upsertSesion(s);
+        limpiarSesionPendiente(s.id);
         ultimoJson = json;
         setSync({ estado: "guardado", ultimoGuardado: Date.now() });
       } catch (e) {
         console.error("Supabase guardar:", e);
+        guardarSesionPendiente(s);
         setSync({ estado: "sinConexion" });
       }
     };
@@ -233,8 +261,22 @@ export function SupabaseSync() {
       if (timer) clearTimeout(timer);
       timer = setTimeout(flush, 1000);
     });
+    const onOnline = () => {
+      const pendiente = leerSesionPendiente();
+      if (!pendiente) return;
+      useStore.getState().setSync({ estado: "pendiente" });
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(flush, 250);
+    };
+    window.addEventListener("online", onOnline);
+    const retry = setInterval(() => {
+      if (!leerSesionPendiente()) return;
+      void flush();
+    }, 5000);
     return () => {
       if (timer) clearTimeout(timer);
+      clearInterval(retry);
+      window.removeEventListener("online", onOnline);
       unsub();
     };
   }, [auth?.userId]);
