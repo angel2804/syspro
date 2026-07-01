@@ -52,6 +52,7 @@ import { SyncBadge } from "@/components/sync-badge";
 import { RegistroModal } from "@/components/grifo/registro-modal";
 import { RegistroAddForm } from "@/components/grifo/registro-fields";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { supabaseHabilitado } from "@/lib/supabase";
 import { LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -88,6 +89,8 @@ import {
 export default function DashboardPage() {
   const router = useRouter();
   const auth = useStore((s) => s.auth);
+  const currentSesionId = useStore((s) => s.currentSesionId);
+  const syncEstado = useStore((s) => s.sync.estado);
   const sesion = useStore((s) =>
     s.sesiones.find((x) => x.id === s.currentSesionId)
   );
@@ -103,8 +106,12 @@ export default function DashboardPage() {
   const [confirmandoCierre, setConfirmandoCierre] = useState(false);
   useEffect(() => {
     if (hydrated && !auth) router.replace("/");
-    else if (hydrated && auth && !sesion) router.replace("/setup");
-  }, [hydrated, auth, sesion, router]);
+    else if (hydrated && auth && !sesion) {
+      const esperandoSesionRemota =
+        supabaseHabilitado && !!currentSesionId && syncEstado === "conectando";
+      if (!esperandoSesionRemota) router.replace("/setup");
+    }
+  }, [hydrated, auth, sesion, currentSesionId, syncEstado, router]);
 
   // Banner en vivo (Fase 5): si el admin cambia el precio de un producto de
   // ESTA isla mientras el turno está abierto, se avisa con un toast que se

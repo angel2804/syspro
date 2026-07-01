@@ -546,7 +546,7 @@ export const useStore = create<StoreState>()(
     }),
     {
       name: "grifo-sys",
-      version: 7,
+      version: 8,
       // Los turnos (`sesiones`) y la lista de clientes (`clientes`) NO se
       // guardan en localStorage: siempre se traen frescos de Supabase al
       // abrir. Así un reset/edición hecho desde otro equipo no deja datos
@@ -562,13 +562,13 @@ export const useStore = create<StoreState>()(
         void sync;
         return resto as StoreState;
       },
-      migrate: (persisted) => {
+      migrate: (persisted, persistedVersion) => {
         const state = persisted as StoreState;
         // v5: los turnos ya no se cachean. v6: tampoco los clientes. Se
         // descartan los que hubiera guardado una versión anterior (evita
         // datos "zombie") y se traerán frescos de Supabase.
         state.sesiones = [];
-        state.currentSesionId = null;
+        if (persistedVersion < 5) state.currentSesionId = null;
         state.clientes = [];
         // v7: la auth pasó a incluir `nombre`/`permisos` (Supabase Auth). Se
         // normaliza cualquier sesión persistida antes; el AuthProvider la
