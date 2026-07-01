@@ -220,20 +220,11 @@ export default function DashboardPage() {
           .setSync({ estado: "guardado", ultimoGuardado: Date.now() });
       } catch (e) {
         console.error("No se pudo guardar el cierre del turno:", e);
-        const mensaje =
-          e instanceof Error ? e.message : "Revisa internet y vuelve a intentar.";
-        const esValidacion =
-          mensaje.includes("Vale duplicado") || mensaje.includes("Ya existe");
-        if (esValidacion) {
-          useStore.getState().setSync({ estado: "pendiente" });
-        } else {
-          guardarSesionPendiente(cerrada);
-          useStore.getState().setSync({ estado: "sinConexion" });
-        }
+        guardarSesionPendiente(cerrada);
+        useStore.getState().setSync({ estado: "sinConexion" });
         toast.error("No se pudo cerrar el turno", {
-          description: esValidacion
-            ? mensaje
-            : "El turno queda en esta pantalla. Revisa internet y vuelve a intentar.",
+          description:
+            "El turno queda en esta pantalla. Revisa internet y vuelve a intentar.",
           duration: 8000,
         });
         setFinalizandoCierre(false);

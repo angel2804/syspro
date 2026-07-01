@@ -7,7 +7,6 @@
 // ni el store: es una función pura sobre la `Sesion`, cubierta por tests.
 import { getIsla } from "../config";
 import type { Sesion } from "../types";
-import { normalizar } from "./clientes";
 
 export type SeveridadCierre = "error" | "aviso";
 
@@ -58,19 +57,11 @@ export function validarCierre(s: Sesion): ProblemaCierre[] {
   });
 
   // --- Créditos ---
-  const valesCredito = new Set<string>();
   s.creditos.forEach((c, i) => {
     const etq = `Crédito #${i + 1}`;
     if (!c.cliente?.trim()) err(`${etq}: falta el cliente.`);
     if (!c.vale?.trim()) err(`${etq}: falta el número de vale.`);
     if (!c.galones || c.galones <= 0) err(`${etq}: los galones son obligatorios.`);
-    if (c.cliente?.trim() && c.vale?.trim()) {
-      const key = `${normalizar(c.cliente)}|${normalizar(c.vale)}`;
-      if (valesCredito.has(key)) {
-        err(`${etq}: el vale ya fue registrado para este cliente en este turno.`);
-      }
-      valesCredito.add(key);
-    }
   });
 
   // --- Promociones ---

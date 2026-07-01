@@ -74,19 +74,6 @@ describe("validarCierre — registros", () => {
     expect(puedeCerrar(problemas)).toBe(false);
   });
 
-  it("bloquea vales duplicados para el mismo cliente en el turno", () => {
-    const s = sesionBase({
-      ...conVenta,
-      creditos: [
-        { id: "c1", producto: "bio", cliente: "Belquer", vale: "003", galones: 5 },
-        { id: "c2", producto: "regular", cliente: "belquer", vale: "003", galones: 3 },
-      ],
-    });
-    const problemas = validarCierre(s);
-    expect(problemas.some((p) => p.mensaje.includes("vale ya fue registrado"))).toBe(true);
-    expect(puedeCerrar(problemas)).toBe(false);
-  });
-
   it("bloquea pago visa/transferencia sin referencia", () => {
     const s = sesionBase({
       ...conVenta,

@@ -27,6 +27,32 @@ import {
 
 type Modo = "inicio" | "admin" | "trabajador";
 
+const REMEMBER_WORKER_KEY = "grifo-sys:remember-worker";
+const REMEMBER_ADMIN_KEY = "grifo-sys:remember-admin";
+
+type WorkerRemember = { email: string; password: string };
+type AdminRemember = { email: string };
+
+function readJson<T>(key: string): T | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeJson(key: string, value: unknown) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(key, JSON.stringify(value));
+}
+
+function forgetKey(key: string) {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(key);
+}
+
 // Fondo del login. Imagen fija (en /public) → muestra la foto y oculta el
 // showcase decorativo de la izquierda. Pon `null` para volver al fondo
 // animado anterior (auroras + ilustración SVG).
@@ -68,6 +94,8 @@ export default function LoginPage() {
   // Flujo trabajador: primero login de la cuenta COMPARTIDA, luego elegir nombre.
   const [temail, setTemail] = useState("");
   const [tpass, setTpass] = useState("");
+  const [recordarAdmin, setRecordarAdmin] = useState(false);
+  const [recordarTrabajador, setRecordarTrabajador] = useState(true);
   const [trabListo, setTrabListo] = useState(false);
   const [trabUserId, setTrabUserId] = useState<string | undefined>(undefined);
 
@@ -90,6 +118,24 @@ export default function LoginPage() {
     t.push(setTimeout(() => terminarCarga(), LOAD_MS));
     return () => t.forEach(clearTimeout);
   }, []);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    const id = window.setTimeout(() => {
+      const admin = readJson<AdminRemember>(REMEMBER_ADMIN_KEY);
+      if (admin?.email) {
+        setEmail(admin.email);
+        setRecordarAdmin(true);
+      }
+      const worker = readJson<WorkerRemember>(REMEMBER_WORKER_KEY);
+      if (worker?.email && worker.password) {
+        setTemail(worker.email);
+        setTpass(worker.password);
+        setRecordarTrabajador(true);
+      }
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [hydrated]);
 
   // Pasa de la pantalla de carga al login con un destello + zoom.
   function terminarCarga() {
@@ -115,6 +161,11 @@ export default function LoginPage() {
     try {
       // Staff (dueño/admin/encargado) con email + contraseña vía Supabase Auth.
       const perfil = await loginConPassword(email, pass);
+      if (recordarAdmin && email.trim()) {
+        writeJson(REMEMBER_ADMIN_KEY, { email: email.trim() } satisfies AdminRemember);
+      } else {
+        forgetKey(REMEMBER_ADMIN_KEY);
+      }
       setAuth({
         rol: perfil.rol,
         trabajador: "",
@@ -137,6 +188,14 @@ export default function LoginPage() {
     setCargando(true);
     try {
       const perfil = await loginTrabajadorCompartido(temail, tpass);
+      if (recordarTrabajador) {
+        writeJson(REMEMBER_WORKER_KEY, {
+          email: temail.trim(),
+          password: tpass,
+        } satisfies WorkerRemember);
+      } else {
+        forgetKey(REMEMBER_WORKER_KEY);
+      }
       setTrabUserId(perfil.id);
       setTrabListo(true); // pasa a elegir nombre real
     } catch (e) {
@@ -385,7 +444,7 @@ export default function LoginPage() {
                     <BackBtn
                       onClick={() => {
                         setModo("inicio");
-                        setEmail("");
+                        if (!recordarAdmin) setEmail("");
                         setPass("");
                       }}
                     />
@@ -427,6 +486,19 @@ export default function LoginPage() {
                       </div>
                     </div>
 
+                    <label className="flex cursor-pointer items-center gap-2 text-xs text-emerald-100/55">
+                      <input
+                        type="checkbox"
+                        className="size-4 accent-emerald-500"
+                        checked={recordarAdmin}
+                        onChange={(e) => {
+                          setRecordarAdmin(e.target.checked);
+                          if (!e.target.checked) forgetKey(REMEMBER_ADMIN_KEY);
+                        }}
+                      />
+                      Recordar correo en esta PC
+                    </label>
+
                     <Button
                       onPointerDown={ripple}
                       disabled={cargando}
@@ -447,8 +519,10 @@ export default function LoginPage() {
                     <BackBtn
                       onClick={() => {
                         setModo("inicio");
-                        setTemail("");
-                        setTpass("");
+                        if (!recordarTrabajador) {
+                          setTemail("");
+                          setTpass("");
+                        }
                       }}
                     />
                     <div className="space-y-2">
@@ -486,6 +560,23 @@ export default function LoginPage() {
                         />
                       </div>
                     </div>
+                    <label className="flex cursor-pointer items-start gap-2 text-xs text-sky-100/55">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 size-4 accent-sky-500"
+                        checked={recordarTrabajador}
+                        onChange={(e) => {
+                          setRecordarTrabajador(e.target.checked);
+                          if (!e.target.checked) forgetKey(REMEMBER_WORKER_KEY);
+                        }}
+                      />
+                      <span>
+                        Recordar cuenta de trabajador en esta PC
+                        <span className="block text-sky-100/35">
+                          Así solo presionan Continuar y luego eligen su nombre.
+                        </span>
+                      </span>
+                    </label>
                     <Button
                       onPointerDown={ripple}
                       disabled={cargando}
@@ -506,7 +597,7 @@ export default function LoginPage() {
                     <BackBtn
                       onClick={() => {
                         setTrabListo(false);
-                        setTpass("");
+                        if (!recordarTrabajador) setTpass("");
                       }}
                     />
                     <label className="text-sm font-medium text-emerald-100/80">
