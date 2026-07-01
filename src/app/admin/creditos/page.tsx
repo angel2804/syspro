@@ -89,7 +89,7 @@ type Filtro = "todos" | "con-deuda" | "sin-deuda" | "saldo-favor" | "pendientes"
 const ESTADO_BADGE: Record<EstadoCliente, { txt: string; cls: string }> = {
   "con-deuda": { txt: "Con deuda", cls: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300" },
   "sin-deuda": { txt: "Sin deuda", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" },
-  "saldo-favor": { txt: "Saldo a favor", cls: "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300" },
+  "saldo-favor": { txt: "Saldo a favor", cls: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300" },
 };
 
 function estadoDeSaldo(deuda: number): EstadoCliente {
@@ -226,12 +226,13 @@ export default function CreditosPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-7xl flex-col gap-4 p-4 md:p-6">
-      <header className="flex items-center gap-3">
+    <div className="min-h-dvh bg-gradient-to-b from-background to-muted/40">
+      <div className="mx-auto flex max-w-7xl flex-col gap-4 p-4 md:p-6">
+        <header className="flex items-center gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-sm">
         <Link href="/admin" className="text-muted-foreground hover:text-foreground">
           <ArrowLeft className="size-5" />
         </Link>
-        <Users className="size-5 text-sky-600" />
+        <Users className="size-5 text-primary" />
         <h1 className="text-lg font-semibold">Créditos por cliente</h1>
         <div className="ml-auto flex gap-2">
           <Button
@@ -244,9 +245,9 @@ export default function CreditosPage() {
           </Button>
           <NuevoClienteDialog refs={refs} alias={alias} onCreado={refrescarTodo} />
         </div>
-      </header>
+        </header>
 
-      <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
+        <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
         {/* Panel izquierdo: buscador + filtros + lista */}
         <aside className="flex flex-col gap-3">
           <div className="relative">
@@ -270,7 +271,7 @@ export default function CreditosPage() {
                 key={id}
                 onClick={() => setFiltro(id)}
                 className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                  filtro === id ? "bg-sky-600 text-white" : "bg-muted text-muted-foreground hover:bg-muted/70"
+                  filtro === id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"
                 }`}
               >
                 {txt}
@@ -307,7 +308,7 @@ export default function CreditosPage() {
                             est === "con-deuda"
                               ? "text-red-600"
                               : est === "saldo-favor"
-                                ? "text-sky-600"
+                                ? "text-amber-600"
                                 : "text-emerald-600"
                           }`}
                         >
@@ -337,6 +338,7 @@ export default function CreditosPage() {
             />
           )}
         </section>
+        </div>
       </div>
     </div>
   );
@@ -401,7 +403,7 @@ function DetalleCliente({
           <Badge className={ESTADO_BADGE[est].cls}>{ESTADO_BADGE[est].txt}</Badge>
           {cliente.estado === "pendiente" && (
             <Badge variant="secondary" className="text-amber-600">
-              Pendiente de revisiÃ³n
+              Pendiente de revisión
             </Badge>
           )}
           <div className="ml-auto flex flex-wrap gap-2">
@@ -504,7 +506,7 @@ function DetalleCliente({
                     </TableCell>
                     <TableCell
                       className={`text-right font-semibold tabular-nums ${
-                        f.saldoAcumulado < -0.005 ? "text-red-600" : f.saldoAcumulado > 0.005 ? "text-sky-600" : ""
+                        f.saldoAcumulado < -0.005 ? "text-red-600" : f.saldoAcumulado > 0.005 ? "text-amber-600" : ""
                       }`}
                     >
                       {formatoSaldo(f.saldoAcumulado)}
@@ -633,7 +635,7 @@ function Resumen({ label, valor, destacar }: { label: string; valor: string; des
       <div className="text-xs text-muted-foreground">{label}</div>
       <div
         className={`text-lg font-bold tabular-nums ${
-          destacar === "con-deuda" ? "text-red-600" : destacar === "saldo-favor" ? "text-sky-600" : ""
+          destacar === "con-deuda" ? "text-red-600" : destacar === "saldo-favor" ? "text-amber-600" : ""
         }`}
       >
         {valor}

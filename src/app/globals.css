@@ -381,18 +381,18 @@
 }
 
 /* ===========================================================================
-   DevLens · Login v2 — capa visual premium (verde tecnológico).
+   GrifoSys · Login v2 — capa visual sobria en la paleta del sistema.
    Solo estilo/movimiento; NO altera ninguna lógica del login.
    =========================================================================== */
 @keyframes dl-flow { to { stroke-dashoffset: -1200; } }
 @keyframes dl-logo-glow {
   0%, 100% {
-    box-shadow: 0 0 24px 2px rgb(16 185 129 / 0.45),
-      0 0 60px 14px rgb(16 185 129 / 0.16);
+    box-shadow: 0 0 20px 1px rgb(245 158 11 / 0.32),
+      0 0 52px 12px rgb(245 158 11 / 0.12);
   }
   50% {
-    box-shadow: 0 0 42px 8px rgb(16 185 129 / 0.7),
-      0 0 84px 24px rgb(16 185 129 / 0.32);
+    box-shadow: 0 0 30px 5px rgb(245 158 11 / 0.48),
+      0 0 70px 20px rgb(249 115 22 / 0.2);
   }
 }
 @keyframes dl-particle-rise {
@@ -407,9 +407,9 @@
 }
 
 @layer utilities {
-  /* Texto con degradado verde animado */
+  /* Texto con degradado ámbar animado */
   .dl-text-gradient {
-    background: linear-gradient(90deg, #34d399, #10b981, #6ee7b7, #10b981);
+    background: linear-gradient(90deg, #fde68a, #f59e0b, #fb923c, #f59e0b);
     background-size: 200% auto;
     -webkit-background-clip: text;
     background-clip: text;
@@ -422,15 +422,15 @@
   /* Líneas tecnológicas que fluyen (SVG) */
   .dl-flow { stroke-dasharray: 5 16; animation: dl-flow 16s linear infinite; }
 
-  /* Partícula verde flotante */
+  /* Partícula ámbar flotante */
   .dl-particle {
     position: absolute;
     border-radius: 9999px;
-    background: radial-gradient(circle, rgb(52 211 153 / 0.95), transparent 70%);
+    background: radial-gradient(circle, rgb(251 191 36 / 0.75), transparent 70%);
     animation: dl-particle-rise linear infinite;
   }
 
-  /* Borde iluminado verde/teal que recorre la tarjeta */
+  /* Borde iluminado en ámbar que recorre la tarjeta */
   .dl-glow-border { position: relative; background-clip: padding-box; }
   .dl-glow-border::before {
     content: "";
@@ -439,8 +439,8 @@
     border-radius: inherit;
     padding: 1px;
     background: linear-gradient(135deg,
-      rgb(16 185 129 / 0.85), rgb(45 212 191 / 0.3) 35%, transparent 55%,
-      rgb(56 189 248 / 0.28), rgb(16 185 129 / 0.75));
+      rgb(245 158 11 / 0.7), rgb(251 191 36 / 0.28) 35%, transparent 55%,
+      rgb(249 115 22 / 0.24), rgb(245 158 11 / 0.6));
     background-size: 200% 200%;
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
@@ -452,21 +452,21 @@
   /* Cuadrícula tenue de fondo con desvanecido radial */
   .dl-grid {
     background-image:
-      linear-gradient(rgb(16 185 129 / 0.055) 1px, transparent 1px),
-      linear-gradient(90deg, rgb(16 185 129 / 0.055) 1px, transparent 1px);
+      linear-gradient(rgb(245 158 11 / 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(245 158 11 / 0.045) 1px, transparent 1px);
     background-size: 46px 46px;
     -webkit-mask-image: radial-gradient(ellipse at 28% 42%, #000 0%, transparent 72%);
     mask-image: radial-gradient(ellipse at 28% 42%, #000 0%, transparent 72%);
   }
 
-  /* Destello de transición verde */
+  /* Destello de transición cálido */
   .dl-flash {
     background: radial-gradient(circle at center, rgb(255 255 255 / 0.85),
-      rgb(16 185 129 / 0.35) 40%, transparent 70%);
+      rgb(245 158 11 / 0.24) 40%, transparent 70%);
     animation: gs-flash 0.6s ease-out forwards;
   }
 }
-/* --- Auroras verdes: ondas luminosas lentas detrás del login --------------
+/* --- Auroras cálidas: ondas luminosas lentas detrás del login --------------
    Solo transform/opacity (aceleradas por GPU) sobre 3 capas con blur; bajo
    costo y movimiento orgánico infinito. */
 @keyframes dl-aurora-a {
@@ -493,7 +493,7 @@
     pointer-events: none;
     filter: blur(72px);
     mix-blend-mode: screen;
-    opacity: 0.18;
+    opacity: 0.12;
   }
   .dl-aurora > span {
     position: absolute;
@@ -502,18 +502,18 @@
   }
   .dl-aurora-1 {
     background: linear-gradient(100deg, transparent 20%,
-      rgb(16 185 129 / 0.5) 45%, rgb(52 211 153 / 0.4) 60%, transparent 80%);
-    animation: dl-aurora-a 19s ease-in-out infinite;
+      rgb(245 158 11 / 0.36) 45%, rgb(251 191 36 / 0.28) 60%, transparent 80%);
+    animation: dl-aurora-a 28s ease-in-out infinite;
   }
   .dl-aurora-2 {
     background: linear-gradient(80deg, transparent 25%,
-      rgb(13 148 136 / 0.42) 50%, rgb(16 185 129 / 0.3) 65%, transparent 85%);
-    animation: dl-aurora-b 26s ease-in-out infinite;
+      rgb(249 115 22 / 0.3) 50%, rgb(245 158 11 / 0.22) 65%, transparent 85%);
+    animation: dl-aurora-b 34s ease-in-out infinite;
   }
   .dl-aurora-3 {
     background: radial-gradient(45% 60% at 60% 45%,
-      rgb(52 211 153 / 0.4), transparent 70%);
-    animation: dl-aurora-c 22s ease-in-out infinite;
+      rgb(251 191 36 / 0.26), transparent 70%);
+    animation: dl-aurora-c 32s ease-in-out infinite;
   }
   .dl-drift-soft { animation: dl-drift-soft 16s ease-in-out infinite; }
 }
