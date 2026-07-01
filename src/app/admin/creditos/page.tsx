@@ -41,8 +41,12 @@ import {
 import { PRODUCTOS } from "@/lib/config";
 import type { ProductoId } from "@/lib/types";
 import {
+  construirEstadoCuenta,
   formatoSaldo,
+  resumenCliente,
+  type CreditoCC,
   type EstadoCliente,
+  type PagoCC,
 } from "@/lib/domain/cuenta-corriente";
 import { resolverCliente, type AliasRef, type ClienteRef } from "@/lib/domain/clientes";
 import {
@@ -59,6 +63,8 @@ import {
   anularPago,
   crearCredito,
   estadoCuentaCliente,
+  fetchCreditos,
+  fetchPagos,
   fetchSaldos,
   registrarPago,
   type EstadoCuentaCliente,
@@ -141,6 +147,72 @@ export default function CreditosPage() {
   const [filtro, setFiltro] = useState<Filtro>("todos");
   const [selId, setSelId] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<EstadoCuentaCliente | null>(null);
+  const [exportandoTodos, setExportandoTodos] = useState(false);
+
+  // Exporta el estado de cuenta de TODOS los clientes con movimientos: en Excel
+  // genera una hoja por cliente (con su nombre); en PDF, una sección por cliente.
+  async function exportarTodosClientes(formato: "xlsx" | "pdf") {
+    setExportandoTodos(true);
+    try {
+      const [creditos, pagos] = await Promise.all([fetchCreditos(), fetchPagos()]);
+      const porCliente = new Map<string, { creditos: CreditoCC[]; pagos: PagoCC[] }>();
+      const asegurar = (id: string) => {
+        let g = porCliente.get(id);
+        if (!g) porCliente.set(id, (g = { creditos: [], pagos: [] }));
+        return g;
+      };
+      for (const c of creditos) asegurar(c.clienteId).creditos.push(c);
+      for (const p of pagos) asegurar(p.clienteId).pagos.push(p);
+
+      const secciones = clientes
+        .filter((c) => c.estado !== "fusionado")
+        .map((c) => ({ cliente: c, grupo: porCliente.get(c.id) }))
+        .filter((x) => x.grupo && (x.grupo.creditos.length || x.grupo.pagos.length))
+        .map(({ cliente, grupo }) => {
+          const filas = construirEstadoCuenta(grupo!.creditos, grupo!.pagos);
+          return {
+            cliente: cliente.nombre,
+            resumen: resumenCliente(grupo!.creditos, grupo!.pagos),
+            filas: filas.map((f) => ({
+              fecha: f.fecha,
+              cliente: cliente.nombre,
+              producto: f.producto ? PRODUCTOS[f.producto] : "",
+              vale: f.vale ?? "",
+              precio: f.precio,
+              totalCredito: f.totalCredito,
+              pago: f.pago,
+              deudaPendiente: f.saldoAcumulado,
+            })),
+          };
+        })
+        .filter((s) => s.filas.length > 0)
+        .sort((a, b) => a.cliente.localeCompare(b.cliente, "es"));
+
+      if (secciones.length === 0) {
+        toast.error("No hay clientes con movimientos para exportar.");
+        return;
+      }
+
+      const res = await fetch("/api/export-creditos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ formato, clientes: secciones }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null);
+        throw new Error(err?.error || "No se pudo generar el archivo.");
+      }
+      const blob = await res.blob();
+      const contentDisposition = res.headers.get("content-disposition") ?? "";
+      const match = contentDisposition.match(/filename="?([^"]+)"?/i);
+      descargarBlob(match?.[1] ?? `creditos-todos-los-clientes.${formato}`, blob);
+      toast.success(`Exportados ${secciones.length} clientes`);
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setExportandoTodos(false);
+    }
+  }
 
   const recargarListado = useCallback(async (silencioso = false) => {
     if (!silencioso) setCargando(true);
@@ -244,6 +316,24 @@ export default function CreditosPage() {
             disabled={saldos.every((s) => s.deudaPendiente <= 0.005)}
           >
             <Download className="size-4" /> Clientes con deuda
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportarTodosClientes("xlsx")}
+            disabled={exportandoTodos || clientes.length === 0}
+            title="Excel con una hoja por cliente"
+          >
+            <Download className="size-4" /> {exportandoTodos ? "Generando…" : "Excel (todos)"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportarTodosClientes("pdf")}
+            disabled={exportandoTodos || clientes.length === 0}
+            title="PDF con todos los clientes"
+          >
+            <FileText className="size-4" /> {exportandoTodos ? "Generando…" : "PDF (todos)"}
           </Button>
           <NuevoClienteDialog refs={refs} alias={alias} onCreado={refrescarTodo} />
         </div>
