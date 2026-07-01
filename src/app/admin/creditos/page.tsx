@@ -9,7 +9,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeft, Download, FileText, GitMerge, Plus, Search, Users } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Download, FileText, GitMerge, Plus, Search, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,6 +53,7 @@ import {
   fetchAlias,
   fetchClientes,
   fusionarClientes,
+  validarCliente,
   type Cliente,
 } from "@/lib/data/clientes";
 import {
@@ -389,7 +390,29 @@ function DetalleCliente({
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-base font-semibold">{cliente.nombre}</h2>
           <Badge className={ESTADO_BADGE[est].cls}>{ESTADO_BADGE[est].txt}</Badge>
+          {cliente.estado === "pendiente" && (
+            <Badge variant="secondary" className="text-amber-600">
+              Pendiente de revisiÃ³n
+            </Badge>
+          )}
           <div className="ml-auto flex flex-wrap gap-2">
+            {cliente.estado === "pendiente" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await validarCliente(cliente.id, "Admin");
+                    toast.success("Cliente validado");
+                    await onCambio();
+                  } catch (e) {
+                    toast.error("No se pudo validar: " + (e as Error).message);
+                  }
+                }}
+              >
+                <CheckCircle2 className="size-4" /> Validar cliente
+              </Button>
+            )}
             <RegistrarCreditoDialog clienteId={cliente.id} onListo={onCambio} />
             <RegistrarPagoDialog
               clienteId={cliente.id}

@@ -15,6 +15,8 @@ import { cn } from "@/lib/utils";
 interface Props {
   value: string;
   onChange: (v: string) => void;
+  onSelectExisting?: (v: string) => void;
+  onSelectNew?: (v: string) => void;
   suggestions: string[];
   // Se dispara con Enter cuando NO hay una sugerencia resaltada (p. ej. para
   // "Agregar" el registro desde el formulario). Si hay resaltada, Enter la elige.
@@ -23,6 +25,7 @@ interface Props {
   className?: string;
   // máximo de sugerencias visibles a la vez (el resto se ve con scroll)
   max?: number;
+  allowNew?: boolean;
 }
 
 // Resalta en negrita la parte del nombre que coincide con lo tecleado.
@@ -45,11 +48,14 @@ function Resaltado({ texto, query }: { texto: string; query: string }) {
 export function AutocompleteInput({
   value,
   onChange,
+  onSelectExisting,
+  onSelectNew,
   suggestions,
   onEnter,
   placeholder,
   className,
   max = 8,
+  allowNew = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [activo, setActivo] = useState(-1); // índice resaltado (-1 = ninguno)
@@ -79,7 +85,12 @@ export function AutocompleteInput({
     return matches.slice(0, max);
   }, [matches, value, max]);
 
-  const mostrar = open && visibles.length > 0;
+  const exacta = useMemo(
+    () => suggestions.some((s) => normalizarCliente(s) === normalizarCliente(value)),
+    [suggestions, value]
+  );
+  const puedeCrear = allowNew && value.trim().length > 0 && !exacta;
+  const mostrar = open && (visibles.length > 0 || puedeCrear);
 
   // Cerrar al hacer clic fuera
   useEffect(() => {
@@ -93,6 +104,16 @@ export function AutocompleteInput({
 
   function elegir(nombre: string) {
     onChange(nombre);
+    onSelectExisting?.(nombre);
+    setOpen(false);
+    setActivo(-1);
+  }
+
+  function crearNuevo() {
+    const nombre = value.trim().toUpperCase();
+    if (!nombre) return;
+    onChange(nombre);
+    onSelectNew?.(nombre);
     setOpen(false);
     setActivo(-1);
   }
@@ -101,7 +122,7 @@ export function AutocompleteInput({
     if (mostrar && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
       e.preventDefault();
       setActivo((a) => {
-        const n = visibles.length;
+        const n = visibles.length + (puedeCrear ? 1 : 0);
         if (e.key === "ArrowDown") return a + 1 >= n ? 0 : a + 1;
         return a - 1 < 0 ? n - 1 : a - 1;
       });
@@ -111,6 +132,11 @@ export function AutocompleteInput({
       if (mostrar && activo >= 0 && activo < visibles.length) {
         e.preventDefault();
         elegir(visibles[activo]);
+        return;
+      }
+      if (mostrar && puedeCrear && activo === visibles.length) {
+        e.preventDefault();
+        crearNuevo();
         return;
       }
       onEnter?.();
@@ -175,6 +201,28 @@ export function AutocompleteInput({
               </span>
             </li>
           ))}
+          {puedeCrear && (
+            <li
+              role="option"
+              aria-selected={activo === visibles.length}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                crearNuevo();
+              }}
+              onMouseEnter={() => setActivo(visibles.length)}
+              className={cn(
+                "flex cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors",
+                activo === visibles.length
+                  ? "bg-accent text-accent-foreground"
+                  : "hover:bg-accent/60"
+              )}
+            >
+              <span className="text-amber-500">+</span>
+              <span className="truncate">
+                Nuevo cliente: <b>{value.trim().toUpperCase()}</b>
+              </span>
+            </li>
+          )}
         </ul>
       )}
     </div>

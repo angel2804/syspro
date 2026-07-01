@@ -100,7 +100,14 @@ export function colsCredito(
 ): Col<Credito>[] {
   return [
     { key: "producto", label: "Producto", tipo: "select", options: productoOptions },
-    { key: "cliente", label: "Cliente", tipo: "text", sugerencias: clientes },
+    {
+      key: "cliente",
+      label: "Cliente",
+      tipo: "text",
+      sugerencias: clientes,
+      requiereSeleccion: true,
+      permiteNuevo: true,
+    },
     { key: "vale", label: "Vale N°", tipo: "text" },
     { key: "factura", label: "Factura", tipo: "text", opcional: true },
     { key: "galones", label: "Galones", tipo: "number" },

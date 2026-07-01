@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { normalizarCliente } from "@/lib/clientes";
 
 export type ColTipo = "text" | "number" | "select";
 
@@ -25,6 +26,8 @@ export interface Col<T> {
   // clientes guardados). Se renderiza un <datalist> nativo: al teclear, el
   // navegador muestra las coincidencias.
   sugerencias?: string[];
+  requiereSeleccion?: boolean;
+  permiteNuevo?: boolean;
   opcional?: boolean;
   // columna calculada de solo lectura (solo en la tabla)
   computar?: (row: T) => ReactNode;
@@ -50,11 +53,24 @@ export function RegistroAddForm<T extends { id: string }>({
   const editables = columns.filter((c) => !c.computar);
 
   function setField(key: string, value: unknown) {
-    setDraft((d) => ({ ...d, [key]: value }));
+    setDraft((d) => ({ ...d, [key]: value, [`__nuevo_${key}`]: false }));
   }
 
   function agregar() {
     const row = draft as Omit<T, "id">;
+    for (const c of editables) {
+      if (!c.requiereSeleccion) continue;
+      const valor = String(draft[c.key] ?? "").trim();
+      if (!valor) continue;
+      const exacto = (c.sugerencias ?? []).some(
+        (s) => normalizarCliente(s) === normalizarCliente(valor)
+      );
+      const nuevo = c.permiteNuevo && draft[`__nuevo_${c.key}`] === true;
+      if (!exacto && !nuevo) {
+        toast.error(`Elige ${c.label} de la lista o selecciona "Nuevo cliente"`);
+        return;
+      }
+    }
     const err = validar?.(row);
     if (err) {
       toast.error(err);
@@ -114,13 +130,20 @@ export function RegistroAddForm<T extends { id: string }>({
                 ))}
               </SelectContent>
             </Select>
-          ) : c.sugerencias && c.sugerencias.length > 0 ? (
+          ) : c.sugerencias ? (
             <AutocompleteInput
               className={`${h} ${dense ? "text-xs" : ""}`}
               placeholder={dense ? ph(c) : undefined}
               suggestions={c.sugerencias}
+              allowNew={c.permiteNuevo}
               value={(draft[c.key] as string) ?? ""}
               onChange={(v) => setField(c.key, v)}
+              onSelectExisting={(v) =>
+                setDraft((d) => ({ ...d, [c.key]: v, [`__nuevo_${c.key}`]: false }))
+              }
+              onSelectNew={(v) =>
+                setDraft((d) => ({ ...d, [c.key]: v, [`__nuevo_${c.key}`]: true }))
+              }
               onEnter={agregar}
             />
           ) : (

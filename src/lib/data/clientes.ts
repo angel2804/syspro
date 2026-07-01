@@ -150,6 +150,27 @@ export async function agregarAlias(
 // Fusiona `origen` dentro de `destino`: reapunta créditos, pagos y alias,
 // convierte el nombre del origen en alias del destino, marca el origen como
 // 'fusionado' y deja auditoría. No borra datos históricos.
+export async function validarCliente(
+  clienteId: string,
+  actorNombre?: string
+): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) throw new Error("Sin conexiÃ³n a la base de datos");
+  const { error } = await sb
+    .from("clientes")
+    .update({ estado: "activo" })
+    .eq("id", clienteId)
+    .eq("estado", "pendiente");
+  if (error) throw error;
+  await registrarAuditoria({
+    accion: "alias_agregado",
+    entidad: "clientes",
+    entidadId: clienteId,
+    actorNombre,
+    detalle: { validacion: "cliente_pendiente_a_activo" },
+  });
+}
+
 export async function fusionarClientes(
   origen: Cliente,
   destino: Cliente,
