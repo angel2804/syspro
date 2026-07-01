@@ -130,6 +130,22 @@ export default function DashboardPage() {
         ...(isla.tipo === "glp" ? ["gasfull", "zetagas"] : []),
       ];
       if (!relevantes.includes(ev.producto)) return;
+      if (ev.aplica === "activo") {
+        const actual = useStore.getState();
+        if (actual.currentSesionId) {
+          useStore.setState((st) => ({
+            sesiones: st.sesiones.map((ses) =>
+              ses.id === actual.currentSesionId
+                ? {
+                    ...ses,
+                    precios: { ...ses.precios, [ev.producto]: ev.precioNuevo },
+                    updatedAt: Date.now(),
+                  }
+                : ses
+            ),
+          }));
+        }
+      }
       const nombre =
         (PRODUCTOS as Record<string, string>)[ev.producto] ??
         (BALONES as Record<string, string>)[ev.producto] ??
@@ -137,7 +153,7 @@ export default function DashboardPage() {
       toast.info(`Nuevo precio de ${nombre}: ${soles(ev.precioNuevo)}`, {
         description:
           ev.aplica === "activo"
-            ? "Aplica desde ahora. Tu turno actual conserva su precio; úsalo para nuevas ventas."
+            ? "Aplica desde ahora en este turno."
             : "Regirá desde el próximo turno.",
         duration: 8000,
       });

@@ -150,6 +150,15 @@ function descargarBlob(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
+function sesionUsaPrecio(s: Sesion, precio: PrecioKey): boolean {
+  const isla = getIsla(s.islaId);
+  if (!isla) return false;
+  return (
+    isla.productos.some((p) => p === precio) ||
+    (isla.tipo === "glp" && (precio === "gasfull" || precio === "zetagas"))
+  );
+}
+
 export default function AdminPage() {
   const router = useRouter();
   const auth = useStore((s) => s.auth);
@@ -373,9 +382,26 @@ export default function AdminPage() {
     if (v === anterior) return; // sin cambio real: no tocar historial
     setPrecio(k, v);
     setPreciosRemoto({ ...precios, [k]: v }).catch(() => {});
+    if ((opts?.aplica ?? "proximo") === "activo") {
+      const ahora = Date.now();
+      const afectadas = remoteList
+        .filter((s) => !s.cerrada && sesionUsaPrecio(s, k))
+        .map((s) => ({
+          ...s,
+          precios: { ...s.precios, [k]: v },
+          updatedAt: ahora,
+        }));
+      if (afectadas.length) {
+        const porId = new Map(afectadas.map((s) => [s.id, s]));
+        setRemoteList((prev) => prev.map((s) => porId.get(s.id) ?? s));
+        Promise.all(afectadas.map((s) => upsertSesion(s).catch(() => {}))).catch(
+          () => {}
+        );
+      }
+    }
     // Historial de precios (Fase 5): cada cambio queda con quién/cuándo/por qué.
-    // El turno activo NO se recalcula (conserva su precio congelado); si
-    // `aplica: 'activo'` el trabajador recibe un banner en vivo.
+    // Si `aplica: 'activo'`, los turnos abiertos afectados reciben el nuevo
+    // precio en su snapshot y el trabajador ve el cambio en vivo.
     registrarCambioPrecio({
       producto: k,
       precioAnterior: anterior,
@@ -2002,8 +2028,7 @@ function PreciosEditor({
         </DialogHeader>
         <p className="text-xs text-muted-foreground">
           El nuevo precio rige desde el <b>próximo turno</b>. Los turnos abiertos
-          conservan su precio congelado; si eliges <b>Aplicar ya</b>, al
-          trabajador le llega un aviso en vivo.
+          pueden conservarlo o actualizarse si eliges <b>Aplicar ya</b>.
         </p>
         {/* Motivo + alcance del cambio (quedan en el historial) */}
         <div className="grid grid-cols-1 gap-2 rounded-lg border bg-muted/40 p-2.5">
@@ -2033,7 +2058,7 @@ function PreciosEditor({
               className="h-7 flex-1 text-xs"
               onClick={() => setAplica("activo")}
             >
-              Aplicar ya (avisar)
+              Aplicar ya
             </Button>
           </div>
         </div>

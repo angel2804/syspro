@@ -56,6 +56,7 @@ export default function LoginPage() {
   const setAuth = useStore((s) => s.setAuth);
   const setCurrentSesion = useStore((s) => s.setCurrentSesion);
   const sesiones = useStore((s) => s.sesiones);
+  const syncEstado = useStore((s) => s.sync.estado);
   const trabajadores = useStore((s) => s.trabajadores);
   const logo = useStore((s) => s.logo);
 
@@ -511,6 +512,11 @@ export default function LoginPage() {
                     <label className="text-sm font-medium text-emerald-100/80">
                       Selecciona tu nombre
                     </label>
+                    {syncEstado === "conectando" ? (
+                      <div className="rounded-xl border border-sky-400/10 bg-white/[0.03] p-4 text-center text-sm text-sky-100/60">
+                        Sincronizando turnos activos...
+                      </div>
+                    ) : (
                     <div className="grid gap-2">
                       {trabajadores.map((nombre, i) => {
                         const activa =
@@ -545,6 +551,7 @@ export default function LoginPage() {
                         );
                       })}
                     </div>
+                    )}
                   </div>
                 )}
               </div>

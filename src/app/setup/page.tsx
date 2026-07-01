@@ -29,6 +29,7 @@ export default function SetupPage() {
   const router = useRouter();
   const auth = useStore((s) => s.auth);
   const sesiones = useStore((s) => s.sesiones);
+  const syncEstado = useStore((s) => s.sync.estado);
   const iniciarSesion = useStore((s) => s.iniciarSesion);
   const setCurrentSesion = useStore((s) => s.setCurrentSesion);
   const mergeRemoteSesiones = useStore((s) => s.mergeRemoteSesiones);
@@ -89,6 +90,8 @@ export default function SetupPage() {
   }, [hydrated, auth, miSesionHoy, router, setCurrentSesion]);
 
   if (!hydrated || !auth) return null;
+
+  const esperandoTurnos = syncEstado === "conectando";
 
   const esAdmin = auth.rol !== "trabajador";
   // Trabajador que ya finalizó su turno hoy: no puede hacer otro.
@@ -187,7 +190,17 @@ export default function SetupPage() {
         </div>
 
         {/* Trabajador que ya hizo su turno hoy: no puede tomar otro */}
-        {yaCumplioHoy ? (
+        {esperandoTurnos ? (
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-10 text-center backdrop-blur-xl">
+            <Fuel className="mx-auto mb-3 h-12 w-12 animate-pulse text-amber-400" />
+            <h2 className="text-lg font-semibold text-white">
+              Sincronizando turnos
+            </h2>
+            <p className="mt-1 text-sm text-slate-400">
+              Espera un momento para ver las islas ocupadas en tiempo real.
+            </p>
+          </div>
+        ) : yaCumplioHoy ? (
           <div className="rounded-2xl border border-white/10 bg-white/5 p-10 text-center backdrop-blur-xl">
             <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-emerald-400" />
             <h2 className="text-lg font-semibold text-white">
@@ -273,7 +286,7 @@ export default function SetupPage() {
         {!yaCumplioHoy && (
           <div className="mt-6 flex justify-end">
             <Button
-              disabled={!sel || verificando}
+              disabled={!sel || verificando || esperandoTurnos}
               onClick={() => setConfirmandoIsla(true)}
               className="h-12 bg-gradient-to-r from-amber-500 to-orange-600 px-8 text-base font-bold text-white shadow-lg shadow-orange-900/30 hover:from-amber-400 hover:to-orange-500 disabled:opacity-40"
             >
