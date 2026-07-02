@@ -10,6 +10,7 @@ export const PERMISOS: { id: Permiso; label: string; grupo: string }[] = [
   { id: "reporte", label: "Ver reporte general", grupo: "Operación" },
   { id: "venta-normal", label: "Registrar venta normal", grupo: "Operación" },
   { id: "reportes-avanzados", label: "Ver reportes avanzados", grupo: "Operación" },
+  { id: "reporte-en-vivo", label: "Ver reporte por finalización (en vivo)", grupo: "Operación" },
   // Trabajadores / usuarios
   { id: "mover", label: "Mover trabajador", grupo: "Personal" },
   { id: "trabajadores", label: "Administrar trabajadores", grupo: "Personal" },

@@ -28,6 +28,10 @@ export type Permiso =
   | "reporte" // ver reporte general del día
   | "venta-normal" // registrar venta a precio normal (dentro del reporte)
   | "reportes-avanzados" // ver reportes avanzados
+  // Ver el reporte/exportar de un día "por finalización" (en vivo), a medida
+  // que van cerrando los turnos. Si FALTA, el día solo aparece cuando está
+  // completo (mañana, tarde y noche cerrados). Por defecto ausente = off.
+  | "reporte-en-vivo"
   // Trabajadores / usuarios
   | "mover" // mover trabajador de isla
   | "trabajadores" // administrar trabajadores operativos

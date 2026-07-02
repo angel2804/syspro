@@ -286,10 +286,19 @@ export default function AdminPage() {
     () => remote.filter((s) => !s.cerrada).sort((a, b) => b.createdAt - a.createdAt),
     [remote]
   );
-  // Superset de "días completos": incluye días con progreso parcial (al
-  // menos una isla cerrada), necesario para poder exportar por isla
-  // individual antes de que el turno completo (3 islas) termine.
-  const dias = useMemo(() => diasConAlgunaSesionCerrada(remote), [remote]);
+  // "Ver reporte por finalización" (en vivo): con el permiso, el día aparece a
+  // medida que van cerrando los turnos (progreso parcial). Sin él, solo cuando
+  // el día completo cerró (mañana, tarde y noche × 3 islas). Afecta tanto
+  // "Reporte del día" como "Exportar" (comparten esta lista). El dueño siempre
+  // lo ve en vivo (tiene todos los permisos).
+  const reporteEnVivo = can("reporte-en-vivo");
+  const dias = useMemo(
+    () =>
+      reporteEnVivo
+        ? diasConAlgunaSesionCerrada(remote)
+        : diasCompletos(remote),
+    [remote, reporteEnVivo]
+  );
   // Turnos ya completos del día seleccionado (para exportar por turno, 3 islas).
   const turnosListos = useMemo(
     () => (selectedDia ? turnosCompletosDeDia(remote, selectedDia) : []),
@@ -1154,7 +1163,9 @@ export default function AdminPage() {
               </h2>
               {dias.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Aún no hay un día con todos sus turnos finalizados.
+                  {reporteEnVivo
+                    ? "Aún no hay ningún turno finalizado."
+                    : "Aún no hay un día con todos sus turnos (mañana, tarde y noche) finalizados."}
                 </p>
               )}
               {dias.map((d, i) => (
@@ -1229,8 +1240,9 @@ export default function AdminPage() {
               />
             ) : (
               <div className="rounded-2xl border border-border/60 bg-card py-20 text-center text-sm text-muted-foreground shadow-sm">
-                El reporte aparece a medida que los turnos van finalizando (un
-                turno se considera listo cuando sus 3 islas cerraron).
+                {reporteEnVivo
+                  ? "El reporte aparece a medida que los turnos van finalizando (un turno se considera listo cuando sus 3 islas cerraron)."
+                  : "El reporte aparecerá cuando el día completo (mañana, tarde y noche) haya cerrado. El dueño puede activar la vista en vivo por usuario en Usuarios."}
               </div>
             )
           ) : vista === "mover" ? (
