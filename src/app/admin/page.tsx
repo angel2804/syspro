@@ -1242,7 +1242,7 @@ export default function AdminPage() {
               <div className="rounded-2xl border border-border/60 bg-card py-20 text-center text-sm text-muted-foreground shadow-sm">
                 {reporteEnVivo
                   ? "El reporte aparece a medida que los turnos van finalizando (un turno se considera listo cuando sus 3 islas cerraron)."
-                  : "El reporte aparecerá cuando el día completo (mañana, tarde y noche) haya cerrado. El dueño puede activar la vista en vivo por usuario en Usuarios."}
+                  : "El reporte aparecerá cuando el día completo (mañana, tarde y noche) haya cerrado."}
               </div>
             )
           ) : vista === "mover" ? (
