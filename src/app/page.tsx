@@ -462,7 +462,7 @@ export default function LoginPage() {
                           autoComplete="username"
                           onChange={(e) => setEmail(e.target.value)}
                           onKeyDown={(e) => e.key === "Enter" && entrarAdmin()}
-                          placeholder="dueno@grifo.com"
+                          placeholder="correo@grifo.com"
                           className="border-amber-400/15 bg-white/[0.04] pl-9 text-white placeholder:text-amber-50/30 focus-visible:border-amber-400/50 focus-visible:ring-amber-400/30"
                         />
                       </div>
@@ -507,9 +507,6 @@ export default function LoginPage() {
                     >
                       {cargando ? "Entrando…" : "Entrar"}
                     </Button>
-                    <p className="text-center text-[11px] text-amber-50/40">
-                      Dueño, administrador o encargado
-                    </p>
                   </div>
                 )}
 
@@ -649,11 +646,6 @@ export default function LoginPage() {
 
               <p className="mt-6 text-center text-xs text-amber-50/35">
                 {hoy()} · GrifoSys · Sistema de estación de servicios
-              </p>
-              <p className="mt-1 text-center text-[11px] text-amber-50/30">
-                <a href="/bootstrap" className="hover:text-amber-100/70 hover:underline">
-                  Primer arranque: crear usuario dueño
-                </a>
               </p>
             </div>
           </main>
