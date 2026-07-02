@@ -218,7 +218,10 @@ create trigger trg_pagos_credito_updated before update on public.pagos_credito
 -- ============================================================================
 -- VISTA de saldos por cliente (deuda = créditos activos - pagos activos).
 -- ============================================================================
-create or replace view public.cliente_saldos as
+-- security_invoker=on: la vista respeta el RLS del usuario que consulta (no el
+-- del owner). Evita el aviso "Security Definer View" del Advisor de Supabase.
+create or replace view public.cliente_saldos
+  with (security_invoker = on) as
   select
     c.id as cliente_id,
     c.nombre,
