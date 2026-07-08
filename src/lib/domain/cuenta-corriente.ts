@@ -34,8 +34,14 @@ export interface CreditoCC {
   galones: number;
   vale: string; // OBLIGATORIO
   factura?: string;
-  precioUnitario: number; // congelado del turno
-  total: number; // galones * precioUnitario
+  precioUnitario: number; // congelado del turno (precio normal del grifo)
+  // Precio con descuento aplicado en la cuenta corriente (no afecta el turno):
+  //   precioAjustado → sobrescribe este vale puntual (el "lápiz").
+  //   precioClienteFijo → precio fijo del cliente para todos sus créditos.
+  // Precio efectivo = precioAjustado ?? precioClienteFijo ?? precioUnitario.
+  precioAjustado?: number;
+  precioClienteFijo?: number;
+  total: number; // galones * precioUnitario (original, referencial)
   estado: EstadoMovimiento;
   reemplazaA?: string;
   motivo?: string;
@@ -75,6 +81,9 @@ export interface ResumenCliente {
 export interface FilaEstadoCuenta {
   tipo: "credito" | "pago";
   movimientoId: string;
+  // Cliente dueño del movimiento. En un estado de cuenta de GRUPO cada fila
+  // puede pertenecer a un sub-cliente distinto (para etiquetar la exportación).
+  clienteId?: string;
   fecha: number;
   // Columnas de crédito (vacías en filas de pago):
   galones?: number;
@@ -104,9 +113,17 @@ function ordenCronologico(
   return a.fecha - b.fecha || a.createdAt - b.createdAt || (a.id < b.id ? -1 : 1);
 }
 
-// Total de un crédito. Si `total` viene guardado se respeta; si no, se calcula
-// galones * precioUnitario (defensa ante documentos incompletos).
+// Precio efectivo del crédito: descuento por vale, si no el precio fijo del
+// cliente, si no el precio congelado del turno.
+export function precioEfectivoCredito(c: CreditoCC): number {
+  return c.precioAjustado ?? c.precioClienteFijo ?? c.precioUnitario;
+}
+
+// Total de un crédito, SIEMPRE al precio efectivo (con descuento). Si no hay
+// descuento y viene `total` guardado, se respeta; si no, galones * precio.
 export function totalCredito(c: CreditoCC): number {
+  const conDescuento = c.precioAjustado ?? c.precioClienteFijo;
+  if (conDescuento != null) return redondear(c.galones * conDescuento);
   if (Number.isFinite(c.total)) return c.total;
   return c.galones * c.precioUnitario;
 }
@@ -172,11 +189,12 @@ export function construirEstadoCuenta(
       filas.push({
         tipo: "credito",
         movimientoId: m.mov.id,
+        clienteId: m.mov.clienteId,
         fecha: m.mov.fecha,
         galones: m.mov.galones,
         producto: m.mov.producto,
         vale: m.mov.vale,
-        precio: m.mov.precioUnitario,
+        precio: precioEfectivoCredito(m.mov),
         totalCredito: redondear(t),
         saldoAcumulado: saldo,
       });
@@ -185,6 +203,7 @@ export function construirEstadoCuenta(
       filas.push({
         tipo: "pago",
         movimientoId: m.mov.id,
+        clienteId: m.mov.clienteId,
         fecha: m.mov.fecha,
         pago: m.mov.monto,
         saldoAcumulado: saldo,

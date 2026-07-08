@@ -54,7 +54,22 @@ import { RegistroModal } from "@/components/grifo/registro-modal";
 import { RegistroAddForm } from "@/components/grifo/registro-fields";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { supabaseHabilitado } from "@/lib/supabase";
-import { LogOut } from "lucide-react";
+import {
+  LogOut,
+  Fuel,
+  CreditCard,
+  NotebookPen,
+  Gift,
+  Tag,
+  Banknote,
+  HandCoins,
+  Send,
+  Cylinder,
+  Calculator,
+  CheckCircle2,
+  AlertTriangle,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   colsAdelanto,
@@ -102,7 +117,10 @@ export default function DashboardPage() {
   const precios = useStore((s) => s.precios);
   const clientes = useStore((s) => s.clientes);
   const clientesDescuento = useStore((s) => s.clientesDescuento);
-  const store = useStore();
+  // Las acciones del store (addPago, updateCredito, …) son referencias estables,
+  // así que se toman una sola vez sin SUSCRIBIR el componente a todo el store.
+  // Antes `useStore()` re-renderizaba la pantalla entera con cada tecla.
+  const store = useStore.getState();
 
   const hydrated = useHydrated();
   const [confirmandoCierre, setConfirmandoCierre] = useState(false);
@@ -252,8 +270,8 @@ export default function DashboardPage() {
       <header className="gs-topbar sticky top-0 z-20 border-b border-white/10 text-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2.5">
           <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-orange-600 text-base shadow-md shadow-orange-900/40 ring-1 ring-white/20">
-              ⛽
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-orange-600 shadow-md shadow-orange-900/40 ring-1 ring-white/20">
+              <Fuel className="h-4 w-4 text-white" />
             </span>
             <span className="text-base font-bold tracking-tight">{isla.nombre}</span>
             <Badge className="bg-primary text-primary-foreground hover:bg-primary">
@@ -331,6 +349,10 @@ export default function DashboardPage() {
                     const o = sesion.odometros[m.id];
                     const gl = Math.max(0, (o?.salida ?? 0) - (o?.entrada ?? 0));
                     const pr = precio(m.producto);
+                    // Marca en rojo cuando el FINAL es menor que el INICIO (dato
+                    // imposible): así el trabajador lo ve al instante, no al cerrar.
+                    const salidaInvalida =
+                      (o?.salida ?? 0) > 0 && (o?.salida ?? 0) < (o?.entrada ?? 0);
                     return (
                       <TableRow key={m.id}>
                         <TableCell
@@ -345,25 +367,44 @@ export default function DashboardPage() {
                               odoText(o?.entrada)
                             )}
                             type="number"
+                            inputMode="decimal"
+                            min={0}
+                            step="any"
+                            aria-label={`${m.label} — odómetro inicio`}
                             value={o?.entrada || ""}
                             onWheel={(e) => e.currentTarget.blur()}
-                            onChange={(e) =>
-                              setOdometro(m.id, { entrada: Number(e.target.value) })
-                            }
+                            onFocus={(e) => e.currentTarget.select()}
+                            onChange={(e) => {
+                              const v = Number(e.target.value);
+                              // Ignora entradas no numéricas (NaN) para no
+                              // corromper el cálculo de galones.
+                              if (!Number.isNaN(v))
+                                setOdometro(m.id, { entrada: v });
+                            }}
                           />
                         </TableCell>
                         <TableCell>
                           <Input
                             className={cn(
                               "h-7 w-40 font-semibold tabular-nums",
-                              odoText(o?.salida)
+                              odoText(o?.salida),
+                              salidaInvalida &&
+                                "border-red-500 text-red-600 focus-visible:ring-red-500"
                             )}
                             type="number"
+                            inputMode="decimal"
+                            min={0}
+                            step="any"
+                            aria-invalid={salidaInvalida}
+                            aria-label={`${m.label} — odómetro final`}
                             value={o?.salida || ""}
                             onWheel={(e) => e.currentTarget.blur()}
-                            onChange={(e) =>
-                              setOdometro(m.id, { salida: Number(e.target.value) })
-                            }
+                            onFocus={(e) => e.currentTarget.select()}
+                            onChange={(e) => {
+                              const v = Number(e.target.value);
+                              if (!Number.isNaN(v))
+                                setOdometro(m.id, { salida: v });
+                            }}
                           />
                         </TableCell>
                         <TableCell className="text-right font-medium">
@@ -395,7 +436,7 @@ export default function DashboardPage() {
               Ingresos y registros
             </div>
             <div className="divide-y">
-              <Seccion titulo="💳 Yapes / Transferencias / Visas">
+              <Seccion icon={CreditCard} titulo="Yapes / Transferencias / Visas">
                 <RegistroAddForm
                   columns={colsPago()}
                   nuevo={nuevoPago}
@@ -404,7 +445,7 @@ export default function DashboardPage() {
                   onAdd={store.addPago}
                 />
               </Seccion>
-              <Seccion titulo="📒 Créditos">
+              <Seccion icon={NotebookPen} titulo="Créditos">
                 <RegistroAddForm
                   columns={cCredito}
                   nuevo={() => nuevoCredito(isla.productos[0])}
@@ -413,7 +454,7 @@ export default function DashboardPage() {
                   onAdd={store.addCredito}
                 />
               </Seccion>
-              <Seccion titulo="🎁 Promociones">
+              <Seccion icon={Gift} titulo="Promociones">
                 <RegistroAddForm
                   columns={cPromo}
                   nuevo={() => nuevoPromo(isla.productos[0])}
@@ -422,7 +463,7 @@ export default function DashboardPage() {
                   onAdd={store.addPromocion}
                 />
               </Seccion>
-              <Seccion titulo="🏷️ Descuentos">
+              <Seccion icon={Tag} titulo="Descuentos">
                 <RegistroAddForm
                   columns={cDescuento}
                   nuevo={() => nuevoDescuento(isla.productos[0])}
@@ -431,7 +472,7 @@ export default function DashboardPage() {
                   onAdd={store.addDescuento}
                 />
               </Seccion>
-              <Seccion titulo="💸 Gastos">
+              <Seccion icon={Banknote} titulo="Gastos">
                 <RegistroAddForm
                   columns={colsGasto()}
                   nuevo={nuevoGasto}
@@ -440,7 +481,7 @@ export default function DashboardPage() {
                   onAdd={store.addGasto}
                 />
               </Seccion>
-              <Seccion titulo="💰 Pago adelantado">
+              <Seccion icon={HandCoins} titulo="Pago adelantado">
                 <RegistroAddForm
                   columns={cAdelanto}
                   nuevo={nuevoAdelanto}
@@ -449,7 +490,7 @@ export default function DashboardPage() {
                   onAdd={store.addAdelanto}
                 />
               </Seccion>
-              <Seccion titulo="📤 Entregas al encargado">
+              <Seccion icon={Send} titulo="Entregas al encargado">
                 <RegistroAddForm
                   columns={colsEntrega()}
                   nuevo={nuevoEntrega}
@@ -459,7 +500,7 @@ export default function DashboardPage() {
                 />
               </Seccion>
               {esGlp && (
-                <Seccion titulo="🛢️ Balones de gas">
+                <Seccion icon={Cylinder} titulo="Balones de gas">
                   <RegistroAddForm
                     columns={cBalon}
                     nuevo={nuevoBalon}
@@ -489,7 +530,7 @@ export default function DashboardPage() {
                 onUpdate={store.updatePago}
                 onRemove={store.removePago}
                 resumen={(r) => resumenPagos(r)}
-                trigger={<TablaBtn icon="💳" label="Pagos" n={sesion.pagos.length} />}
+                trigger={<TablaBtn icon={CreditCard} label="Pagos" n={sesion.pagos.length} />}
               />
               <RegistroModal<Credito>
                 titulo="Créditos"
@@ -508,7 +549,7 @@ export default function DashboardPage() {
                   )
                 }
                 trigger={
-                  <TablaBtn icon="📒" label="Créditos" n={sesion.creditos.length} />
+                  <TablaBtn icon={NotebookPen} label="Créditos" n={sesion.creditos.length} />
                 }
               />
               <RegistroModal<Promocion>
@@ -528,7 +569,7 @@ export default function DashboardPage() {
                   )
                 }
                 trigger={
-                  <TablaBtn icon="🎁" label="Promos" n={sesion.promociones.length} />
+                  <TablaBtn icon={Gift} label="Promos" n={sesion.promociones.length} />
                 }
               />
               <RegistroModal<Descuento>
@@ -550,7 +591,7 @@ export default function DashboardPage() {
                 }
                 trigger={
                   <TablaBtn
-                    icon="🏷️"
+                    icon={Tag}
                     label="Descuentos"
                     n={sesion.descuentos.length}
                   />
@@ -564,7 +605,7 @@ export default function DashboardPage() {
                 onUpdate={store.updateGasto}
                 onRemove={store.removeGasto}
                 resumen={(r) => `Total: ${soles(totalMonto(r))}`}
-                trigger={<TablaBtn icon="💸" label="Gastos" n={sesion.gastos.length} />}
+                trigger={<TablaBtn icon={Banknote} label="Gastos" n={sesion.gastos.length} />}
               />
               <RegistroModal<Adelanto>
                 titulo="Pago adelantado"
@@ -575,7 +616,7 @@ export default function DashboardPage() {
                 onRemove={store.removeAdelanto}
                 resumen={(r) => `Total: ${soles(totalMonto(r))}`}
                 trigger={
-                  <TablaBtn icon="💰" label="Adelantos" n={sesion.adelantos.length} />
+                  <TablaBtn icon={HandCoins} label="Adelantos" n={sesion.adelantos.length} />
                 }
               />
               <RegistroModal<Entrega>
@@ -587,7 +628,7 @@ export default function DashboardPage() {
                 onRemove={store.removeEntrega}
                 resumen={(r) => `Total: ${soles(totalMonto(r))}`}
                 trigger={
-                  <TablaBtn icon="📤" label="Entregas" n={sesion.entregas.length} />
+                  <TablaBtn icon={Send} label="Entregas" n={sesion.entregas.length} />
                 }
               />
               {esGlp && (
@@ -601,7 +642,7 @@ export default function DashboardPage() {
                   resumen={(r) => `Total: ${soles(totalBalonesSoles(r, precios))}`}
                   trigger={
                     <TablaBtn
-                      icon="🛢️"
+                      icon={Cylinder}
                       label="Balones"
                       n={(sesion.balones ?? []).length}
                     />
@@ -614,9 +655,21 @@ export default function DashboardPage() {
           {/* Cuadre */}
           <section className="gs-card animate-fade-up rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm" style={{ animationDelay: "160ms" }}>
             <h3 className="mb-2.5 flex items-center gap-1.5 text-sm font-bold">
-              <span className="text-base">🧮</span> Cuadre de caja
+              <Calculator className="h-4 w-4 text-primary" /> Cuadre de caja
             </h3>
-            <div className="space-y-0.5 text-xs">
+
+            {/* Protagonista: el efectivo que el trabajador debe entregar, en
+                número grande y legible a un metro (base del turno). */}
+            <div className="mb-2 rounded-xl bg-primary/10 px-4 py-3 text-center">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Efectivo a entregar
+              </p>
+              <p className="mt-0.5 text-3xl font-extrabold tabular-nums text-primary">
+                {soles(cuadre.efectivoAEntregar)}
+              </p>
+            </div>
+
+            <div className="space-y-0.5 text-sm">
               <Linea label="Venta total" valor={soles(cuadre.ventaTotal)} bold />
               <Linea label="− Créditos" valor={soles(cuadre.totalCreditos)} neg />
               <Linea label="− Promociones" valor={soles(cuadre.totalPromociones)} neg />
@@ -639,43 +692,37 @@ export default function DashboardPage() {
                   pos
                 />
               )}
-            </div>
-            <div className="my-2 flex items-center justify-between rounded-lg bg-primary/10 px-3 py-1.5">
-              <span className="text-sm font-semibold">Efectivo a entregar</span>
-              <span className="text-base font-bold text-primary">
-                {soles(cuadre.efectivoAEntregar)}
-              </span>
-            </div>
-            <div className="space-y-0.5 text-xs">
               <Linea label="Entregado al encargado" valor={soles(cuadre.totalEntregado)} />
-              <div className="flex items-center justify-between rounded-lg bg-amber-500/15 px-3 py-1.5">
-                <span className="font-semibold">Saldo pendiente</span>
-                <span
-                  className={cn(
-                    "text-base font-bold",
-                    cuadre.saldoPendiente > 0.001
-                      ? "text-amber-600"
-                      : "text-green-600"
-                  )}
-                >
-                  {soles(cuadre.saldoPendiente)}
-                </span>
-              </div>
+            </div>
+
+            {/* Estado en vivo del cuadre: verde si ya no falta entregar nada. */}
+            <div
+              className={cn(
+                "mt-2 flex items-center justify-between gap-2 rounded-lg px-3 py-2",
+                cuadre.saldoPendiente > 0.001
+                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                  : "bg-green-500/15 text-green-700 dark:text-green-300"
+              )}
+            >
+              <span className="flex items-center gap-1.5 text-sm font-semibold">
+                {cuadre.saldoPendiente > 0.001 ? (
+                  <>
+                    <AlertTriangle className="h-4 w-4 shrink-0" /> Falta entregar
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="h-4 w-4 shrink-0" /> Todo entregado
+                  </>
+                )}
+              </span>
+              <span className="text-lg font-bold tabular-nums">
+                {soles(cuadre.saldoPendiente)}
+              </span>
             </div>
           </section>
 
-          {/* Recordatorio antes de cerrar el turno */}
-          <div className="flex items-start gap-2 rounded-lg border border-amber-300/60 bg-amber-50 p-2.5 text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200">
-            <span className="text-sm">📝</span>
-            <span>
-              Antes de finalizar, revisa que todo esté registrado: pagos,
-              créditos, gastos y entregas. Una vez cerrado no podrás editar el
-              turno.
-            </span>
-          </div>
-
           <Button
-            className="h-11 w-full bg-primary text-sm font-bold tracking-wide text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/30 active:scale-[0.98]"
+            className="h-12 w-full bg-primary text-base font-bold tracking-wide text-primary-foreground transition-all hover:bg-primary/90 hover:shadow-lg hover:shadow-primary/30 active:scale-[0.98]"
             onClick={() => setConfirmandoCierre(true)}
           >
             FINALIZAR TURNO
@@ -777,16 +824,19 @@ export default function DashboardPage() {
 }
 
 function Seccion({
+  icon: Icon,
   titulo,
   children,
 }: {
+  icon: LucideIcon;
   titulo: string;
   children: ReactNode;
 }) {
   return (
     <div className="flex items-center gap-2 px-2 py-2 transition-colors hover:bg-accent/40">
-      <h4 className="w-24 shrink-0 border-l-2 border-primary/60 pl-2 text-[11px] font-bold leading-tight">
-        {titulo}
+      <h4 className="flex w-28 shrink-0 items-center gap-1.5 border-l-2 border-primary/60 pl-2 text-xs font-bold leading-tight">
+        <Icon className="h-3.5 w-3.5 shrink-0 text-primary" />
+        <span>{titulo}</span>
       </h4>
       <div className="flex-1">{children}</div>
     </div>
@@ -794,23 +844,23 @@ function Seccion({
 }
 
 function TablaBtn({
-  icon,
+  icon: Icon,
   label,
   n,
   className,
   ...props
 }: {
-  icon: string;
+  icon: LucideIcon;
   label: string;
   n: number;
 } & ComponentProps<typeof Button>) {
   return (
     <Button
       variant="outline"
-      className={cn("relative h-12 flex-col gap-0 text-[11px] card-lift", className)}
+      className={cn("relative h-12 flex-col gap-0.5 text-[11px] card-lift", className)}
       {...props}
     >
-      <span className="text-base">{icon}</span>
+      <Icon className="h-4 w-4" />
       {label}
       {n > 0 && (
         <span className="absolute right-1 top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">

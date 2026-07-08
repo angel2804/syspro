@@ -12,7 +12,20 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { Pencil, Check, X } from "lucide-react";
+import {
+  Pencil,
+  Check,
+  X,
+  CreditCard,
+  NotebookPen,
+  Gift,
+  Tag,
+  Banknote,
+  HandCoins,
+  Send,
+  Cylinder,
+  type LucideIcon,
+} from "lucide-react";
 import {
   getIsla,
   PRODUCTOS,
@@ -70,38 +83,44 @@ export function SesionVista({
     }
   }
 
-  const mini: { titulo: string; n: number; total: string }[] = [
+  const mini: { icon: LucideIcon; titulo: string; n: number; total: string }[] = [
     {
-      titulo: "💳 Pagos",
+      icon: CreditCard,
+      titulo: "Pagos",
       n: sesion.pagos.length,
       total: soles(cuadre.totalElectronico),
     },
-    { titulo: "📒 Créditos", n: sesion.creditos.length, total: soles(cuadre.totalCreditos) },
+    { icon: NotebookPen, titulo: "Créditos", n: sesion.creditos.length, total: soles(cuadre.totalCreditos) },
     {
-      titulo: "🎁 Promos",
+      icon: Gift,
+      titulo: "Promos",
       n: sesion.promociones.length,
       total: soles(cuadre.totalPromociones),
     },
     {
-      titulo: "🏷️ Descuentos",
+      icon: Tag,
+      titulo: "Descuentos",
       n: sesion.descuentos.length,
       total: soles(cuadre.totalDescuentos),
     },
-    { titulo: "💸 Gastos", n: sesion.gastos.length, total: soles(cuadre.totalGastos) },
+    { icon: Banknote, titulo: "Gastos", n: sesion.gastos.length, total: soles(cuadre.totalGastos) },
     {
-      titulo: "💰 Adelantos",
+      icon: HandCoins,
+      titulo: "Adelantos",
       n: sesion.adelantos.length,
       total: soles(cuadre.totalAdelantos),
     },
     {
-      titulo: "📤 Entregas",
+      icon: Send,
+      titulo: "Entregas",
       n: (sesion.entregas ?? []).length,
       total: soles(cuadre.totalEntregado),
     },
     ...(esGlp
       ? [
           {
-            titulo: "🛢️ Balones",
+            icon: Cylinder,
+            titulo: "Balones",
             n: (sesion.balones ?? []).length,
             total: soles(cuadre.totalBalones),
           },
@@ -229,7 +248,10 @@ export function SesionVista({
         {mini.map((x) => (
           <div key={x.titulo} className="rounded-lg border bg-card p-2">
             <div className="flex items-center justify-between">
-              <span className="font-medium">{x.titulo}</span>
+              <span className="flex items-center gap-1.5 font-medium">
+                <x.icon className="h-3.5 w-3.5 text-primary" />
+                {x.titulo}
+              </span>
               <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
                 {x.n}
               </Badge>

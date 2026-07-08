@@ -84,6 +84,18 @@ export async function requirePermiso(token: string, permiso: Permiso): Promise<P
   return perfil;
 }
 
+// Extrae el access token del header Authorization ("Bearer <token>") y exige
+// que el llamador tenga el permiso indicado. Pensado para route handlers
+// (/api/export-*). Lanza si el token es inválido o falta el permiso.
+export async function requirePermisoDeRequest(
+  req: Request,
+  permiso: Permiso
+): Promise<Perfil> {
+  const token =
+    req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim() ?? "";
+  return requirePermiso(token, permiso);
+}
+
 // Auditoría desde el servidor (usa el cliente admin, no el de navegador).
 export async function auditarServidor(r: {
   accion: string;

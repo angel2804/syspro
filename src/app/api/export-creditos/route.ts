@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import ExcelJS from "exceljs";
 import path from "path";
+import { requirePermisoDeRequest } from "@/lib/server/supabase-admin";
 
 type FormatoExport = "xlsx" | "pdf";
 
@@ -531,6 +532,11 @@ async function generarExcelTodos(secciones: SeccionCliente[]) {
 
 export async function POST(req: NextRequest) {
   try {
+    try {
+      await requirePermisoDeRequest(req, "exportar");
+    } catch (e) {
+      return Response.json({ error: (e as Error).message }, { status: 403 });
+    }
     const data = (await req.json()) as ExportCreditosBody;
     const secciones = seccionesDe(data);
     const esTodos = !!(data.clientes && data.clientes.length);

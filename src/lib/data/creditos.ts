@@ -34,12 +34,15 @@ type FilaCredito = {
   vale: string;
   factura: string | null;
   precio_unitario: number;
+  precio_ajustado: number | null;
   total: number;
   estado: CreditoCC["estado"];
   reemplaza_a: string | null;
   motivo: string | null;
   created_at: number;
   updated_at: number;
+  // Join opcional con el cliente (precio fijo con descuento del cliente).
+  cliente?: { precio_credito: number | null } | null;
 };
 
 function creditoDeFila(r: FilaCredito): CreditoCC {
@@ -57,6 +60,9 @@ function creditoDeFila(r: FilaCredito): CreditoCC {
     vale: r.vale,
     factura: r.factura ?? undefined,
     precioUnitario: Number(r.precio_unitario),
+    precioAjustado: r.precio_ajustado != null ? Number(r.precio_ajustado) : undefined,
+    precioClienteFijo:
+      r.cliente?.precio_credito != null ? Number(r.cliente.precio_credito) : undefined,
     total: Number(r.total),
     estado: r.estado,
     reemplazaA: r.reemplaza_a ?? undefined,
@@ -103,7 +109,12 @@ function pagoDeFila(r: FilaPago): PagoCC {
 export async function fetchCreditos(clienteId?: string): Promise<CreditoCC[]> {
   const sb = getSupabase();
   if (!sb) return [];
-  let q = sb.from("creditos").select("*").order("fecha");
+  // Trae también el precio fijo con descuento del cliente (join) para resolver
+  // el precio efectivo del crédito sin una segunda consulta.
+  let q = sb
+    .from("creditos")
+    .select("*, cliente:clientes(precio_credito)")
+    .order("fecha");
   if (clienteId) q = q.eq("cliente_id", clienteId);
   const { data, error } = await q;
   if (error) throw error;
@@ -130,6 +141,38 @@ export interface EstadoCuentaCliente {
 // Estado de cuenta completo de un cliente (resumen + filas cronológicas).
 export async function estadoCuentaCliente(clienteId: string): Promise<EstadoCuentaCliente> {
   const [creditos, pagos] = await Promise.all([fetchCreditos(clienteId), fetchPagos(clienteId)]);
+  return {
+    resumen: resumenCliente(creditos, pagos),
+    filas: construirEstadoCuenta(creditos, pagos),
+    creditos,
+    pagos,
+  };
+}
+
+// Créditos de VARIOS clientes (para el estado de cuenta de un grupo).
+export async function fetchCreditosDe(clienteIds: string[]): Promise<CreditoCC[]> {
+  const sb = getSupabase();
+  if (!sb || clienteIds.length === 0) return [];
+  const { data, error } = await sb
+    .from("creditos")
+    .select("*, cliente:clientes(precio_credito)")
+    .in("cliente_id", clienteIds)
+    .order("fecha");
+  if (error) throw error;
+  return (data ?? []).map((r) => creditoDeFila(r as FilaCredito));
+}
+
+// Estado de cuenta de un GRUPO: créditos de la madre + todos los sub-clientes,
+// pero PAGOS solo de la madre (los pagos del grupo se registran ahí). Así la
+// deuda del grupo = créditos de todos − pagos de la madre.
+export async function estadoCuentaGrupo(
+  madreId: string,
+  subIds: string[]
+): Promise<EstadoCuentaCliente> {
+  const [creditos, pagos] = await Promise.all([
+    fetchCreditosDe([madreId, ...subIds]),
+    fetchPagos(madreId),
+  ]);
   return {
     resumen: resumenCliente(creditos, pagos),
     filas: construirEstadoCuenta(creditos, pagos),
@@ -207,6 +250,31 @@ export async function crearCredito(c: NuevoCredito): Promise<void> {
     entidadId: c.clienteId,
     actorNombre: c.trabajadorNombre,
     detalle: { vale: c.vale, producto: c.producto, galones: c.galones, total },
+  });
+}
+
+// Ajusta el precio de UN crédito puntual (el "lápiz" de la fila): descuento
+// interno de los admins. `precio=null` quita el ajuste y vuelve al precio del
+// cliente / del turno. No afecta el turno del grifero ni sus reportes.
+export async function ajustarPrecioCredito(
+  id: string,
+  precio: number | null,
+  actorNombre?: string
+): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) throw new Error("Sin conexión a la base de datos");
+  if (precio != null && !(precio >= 0)) throw new Error("El precio no puede ser negativo");
+  const { error } = await sb
+    .from("creditos")
+    .update({ precio_ajustado: precio })
+    .eq("id", id);
+  if (error) throw error;
+  await registrarAuditoria({
+    accion: "cambio_precio",
+    entidad: "creditos",
+    entidadId: id,
+    actorNombre,
+    detalle: { ajuste_precio: precio },
   });
 }
 

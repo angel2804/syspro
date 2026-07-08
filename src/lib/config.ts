@@ -57,15 +57,11 @@ export const PERMISOS_BASE: Record<"admin" | "encargado", Permiso[]> = {
 // Trabajadores por defecto (editables por el admin; ver store.trabajadores)
 export const TRABAJADORES_DEFAULT = ["Angel", "Lenin", "Miguel"];
 
-// Contraseña admin (fase posterior: mover a Firebase Auth / Firestore)
-export const ADMIN_PASSWORD =
-  process.env.NEXT_PUBLIC_ADMIN_PASSWORD || "admin123";
-
-// Segunda contraseña, exclusiva de la pestaña "Configuraciones" del panel
-// admin (reset de base de datos para pruebas). Capa extra, no reemplaza
-// ADMIN_PASSWORD.
-export const CONFIG_PASSWORD =
-  process.env.NEXT_PUBLIC_CONFIG_PASSWORD || "angelccasa284";
+// NOTA DE SEGURIDAD: ya NO existen contraseñas en el cliente. El acceso del
+// staff (dueño/admin/encargado) es SIEMPRE por Supabase Auth (email+contraseña,
+// ver loginConPassword) y la validación real la da la RLS por rol/permiso en la
+// base de datos. La sección "Configuraciones" (backups/reset) se protege con el
+// permiso 'reset' del perfil, no con una contraseña embebida en el bundle.
 
 export const TURNOS: { id: TurnoId; label: string }[] = [
   { id: "manana", label: "Mañana" },

@@ -38,7 +38,7 @@ import { sincronizarCreditosSesion } from "@/lib/data/creditos";
 import { clientesOrdenados } from "@/lib/clientes";
 import { entradaAutomatica, uid, useStore } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
-import { logoutSupabase } from "@/lib/data/auth";
+import { authHeaders, logoutSupabase } from "@/lib/data/auth";
 import {
   fetchHistorialPrecios,
   registrarCambioPrecio,
@@ -47,7 +47,6 @@ import {
 import { registrarAuditoria } from "@/lib/data/auditoria";
 import {
   BALONES,
-  CONFIG_PASSWORD,
   getIsla,
   ISLAS,
   PERMISOS_TODOS,
@@ -56,6 +55,7 @@ import {
   turnoLabel,
 } from "@/lib/config";
 import {
+  calcularReporteDia,
   diaMenos,
   diaOperativo,
   diaOperativoActual,
@@ -67,7 +67,7 @@ import {
   turnosConAlgunaIslaCerrada,
 } from "@/lib/calc";
 import type { Permiso, PrecioKey, Precios, Rol, Sesion, TurnoId } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, descargarBlob } from "@/lib/utils";
 import { SesionVista } from "@/components/grifo/sesion-vista";
 import { ReporteDiaVista } from "@/components/grifo/reporte-dia-vista";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -98,12 +98,21 @@ import {
   Wallet,
   ScrollText,
   History,
+  TrendingUp,
+  TrendingDown,
+  Banknote,
+  NotebookPen,
 } from "lucide-react";
 import Link from "next/link";
 
-// Días operativos a conservar; los más antiguos (ya completos) se borran
-// automáticamente. Ver limpieza en el efecto de retención más abajo.
-const DIAS_A_CONSERVAR = 7;
+// Días operativos a conservar en caliente. Un día operativo con todos sus
+// registros pesa ~5–20 KB, así que un año entero de historia (~30–60 MB) cabe
+// de sobra en el plan gratuito de Supabase (500 MB). Por eso conservamos un año
+// completo: el historial financiero no debe borrarse a los pocos días. La poda
+// real y verificada (con backup previo) conviene moverla a un cron del servidor
+// (ver supabase/08-retencion-cron.sql); este límite alto es el respaldo del
+// cliente para no crecer indefinidamente tras varios años sin mantenimiento.
+const DIAS_A_CONSERVAR = 365;
 
 type Vista =
   | "activos"
@@ -136,22 +145,6 @@ function contenidoTrabajador(s: Sesion) {
     out[k] = (s as unknown as Record<string, unknown>)[k] ?? [];
   }
   return out;
-}
-
-// Dispara la descarga de un blob de forma robusta. El <a> debe agregarse al
-// DOM y el objeto URL revocarse después (no de inmediato), o algunos
-// navegadores bloquean la descarga pidiendo permiso ("se necesita permiso
-// para continuar con la descarga").
-function descargarBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.rel = "noopener";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
 
 function sesionUsaPrecio(s: Sesion, precio: PrecioKey): boolean {
@@ -204,8 +197,6 @@ export default function AdminPage() {
   const [paginaCliente, setPaginaCliente] = useState(0);
   const [conectado, setConectado] = useState(false);
   const resetSesiones = useStore((s) => s.resetSesiones);
-  const [configPass, setConfigPass] = useState("");
-  const [configUnlocked, setConfigUnlocked] = useState(false);
   const [confirmandoReset, setConfirmandoReset] = useState(false);
   const [reseteando, setReseteando] = useState(false);
   // Forzar liberación de un turno abierto (zona de pruebas): lo borra para que
@@ -273,7 +264,10 @@ export default function AdminPage() {
     const unsub = subscribeSesiones(corte, (lista) => {
       aplicar(lista);
     });
-    const poll = setInterval(refetch, 3000);
+    // Realtime ya refresca ante cada cambio; este sondeo es solo un respaldo
+    // por si el canal se cae. A 30s (antes 3s) reduce ~10x el consumo de ancho
+    // de banda del plan gratuito con el panel abierto todo el día.
+    const poll = setInterval(refetch, 30000);
     return () => {
       clearInterval(poll);
       unsub();
@@ -573,7 +567,7 @@ export default function AdminPage() {
     try {
       const res = await fetch("/api/export-isla", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           dia: selectedDia,
           turno: exportTurno,
@@ -602,7 +596,7 @@ export default function AdminPage() {
     try {
       const res = await fetch("/api/export-isla", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({
           dia: selectedDia,
           turno: exportTurnoIsla,
@@ -717,7 +711,7 @@ export default function AdminPage() {
     try {
       const res = await fetch("/api/export-general", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await authHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ dia: selectedDia, sesiones: delDia, precios }),
       });
       if (!res.ok) {
@@ -972,9 +966,9 @@ export default function AdminPage() {
   return (
     <div className="flex min-h-screen flex-col bg-gradient-to-b from-background to-muted/40">
       {/* Header */}
-      <header className="gs-topbar flex items-center justify-between border-b border-white/10 px-4 py-2.5 text-white">
-        <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-amber-400 to-orange-600 animate-pulse-ring">
+      <header className="gs-topbar flex items-center gap-3 border-b border-white/10 px-4 py-2.5 text-white">
+        <div className="flex min-w-0 shrink items-center gap-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-amber-400 to-orange-600 animate-pulse-ring">
             {logo ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logo} alt="Logo" className="h-full w-full object-contain" />
@@ -982,13 +976,13 @@ export default function AdminPage() {
               <Fuel className="h-5 w-5 text-white" />
             )}
           </span>
-          <span className="text-lg font-bold">GrifoSys</span>
-          <span className="rounded bg-white/10 px-2 py-0.5 text-xs font-medium">
+          <span className="shrink-0 text-lg font-bold">GrifoSys</span>
+          <span className="hidden shrink-0 rounded bg-white/10 px-2 py-0.5 text-xs font-medium sm:inline">
             Administrador
           </span>
           <span
             className={cn(
-              "ml-2 flex items-center gap-1 text-xs transition-colors",
+              "ml-1 hidden shrink-0 items-center gap-1 text-xs transition-colors md:flex",
               conectado ? "text-emerald-400" : "text-slate-400"
             )}
           >
@@ -997,21 +991,19 @@ export default function AdminPage() {
           </span>
         </div>
 
-        {/* Recordatorio en movimiento: guardar los reportes en la PC */}
-        <div className="mx-4 hidden flex-1 overflow-hidden md:block">
-          <div className="marquee-track gap-12 text-xs font-medium text-amber-300/90">
-            <span className="inline-flex items-center gap-2">
-              💾 No olvides descargar y guardar los reportes en tu PC — los
-              datos se conservan solo los últimos 7 días.
+        {/* Recordatorio fijo (antes en movimiento): solo en pantallas anchas
+            para no chocar con las acciones de la derecha. */}
+        <div className="mx-2 hidden min-w-0 flex-1 justify-center xl:flex">
+          <span className="flex min-w-0 items-center gap-2 truncate rounded-full bg-amber-400/10 px-3 py-1 text-xs font-medium text-amber-300/90 ring-1 ring-amber-400/20">
+            <Save className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">
+              Descarga y guarda los reportes en tu PC — el historial se conserva
+              en la nube por 1 año.
             </span>
-            <span className="inline-flex items-center gap-2" aria-hidden>
-              💾 No olvides descargar y guardar los reportes en tu PC — los
-              datos se conservan solo los últimos 7 días.
-            </span>
-          </div>
+          </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {auth?.rol === "dueno" && (
             <Link
               href="/admin/usuarios"
@@ -1045,6 +1037,7 @@ export default function AdminPage() {
         {/* Sidebar */}
         <aside className="w-56 shrink-0 border-r bg-sidebar p-3">
           <nav className="mb-3 space-y-1">
+            {(can("activos") || can("reporte")) && <NavLabel>Operación</NavLabel>}
             {can("activos") && (
               <SideNav
                 activo={vista === "activos"}
@@ -1061,6 +1054,7 @@ export default function AdminPage() {
                 label="Reporte del día"
               />
             )}
+            {(can("mover") || can("usuarios")) && <NavLabel>Personal</NavLabel>}
             {can("mover") && (
               <SideNav
                 activo={vista === "mover"}
@@ -1077,6 +1071,7 @@ export default function AdminPage() {
                 label="Usuarios"
               />
             )}
+            {(can("clientes") || can("creditos")) && <NavLabel>Créditos</NavLabel>}
             {can("clientes") && (
               <SideNav
                 activo={vista === "clientes"}
@@ -1095,6 +1090,9 @@ export default function AdminPage() {
                 </span>
                 Créditos por cliente
               </Link>
+            )}
+            {(can("exportar") || can("config") || can("auditoria")) && (
+              <NavLabel>Sistema</NavLabel>
             )}
             {can("exportar") && (
               <SideNav
@@ -1178,7 +1176,9 @@ export default function AdminPage() {
                     selectedDia === d && "border-primary bg-accent ring-1 ring-primary"
                   )}
                 >
-                  📅 {d}
+                  <span className="flex items-center gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5 shrink-0" /> {d}
+                  </span>
                 </button>
               ))}
             </div>
@@ -1189,6 +1189,7 @@ export default function AdminPage() {
         <main className="flex-1 p-3">
           {vista === "activos" ? (
             <>
+              <PortadaKPIs remote={remote} precios={precios} activos={activos.length} />
               <div className="mb-3 flex gap-2">
                 {ISLAS.map((isla) => {
                   const activa = activos.find((s) => s.islaId === isla.id);
@@ -1219,9 +1220,11 @@ export default function AdminPage() {
                     }
                   />
                 ) : (
-                  <div className="py-20 text-center text-sm text-muted-foreground">
-                    Selecciona un turno activo para ver su detalle en tiempo real.
-                  </div>
+                  <EstadoVacio
+                    icon={<Activity className="h-5 w-5" />}
+                    titulo="Sin turno seleccionado"
+                    texto="Elige un turno activo arriba para ver su detalle en tiempo real."
+                  />
                 )}
               </div>
             </>
@@ -1239,11 +1242,15 @@ export default function AdminPage() {
                 mostrarVentaNormal={can("venta-normal")}
               />
             ) : (
-              <div className="rounded-2xl border border-border/60 bg-card py-20 text-center text-sm text-muted-foreground shadow-sm">
-                {reporteEnVivo
-                  ? "El reporte aparece a medida que los turnos van finalizando (un turno se considera listo cuando sus 3 islas cerraron)."
-                  : "El reporte aparecerá cuando el día completo (mañana, tarde y noche) haya cerrado."}
-              </div>
+              <EstadoVacio
+                icon={<CalendarDays className="h-5 w-5" />}
+                titulo="Aún no hay reporte para mostrar"
+                texto={
+                  reporteEnVivo
+                    ? "El reporte aparece a medida que los turnos van finalizando (un turno está listo cuando sus 3 islas cerraron)."
+                    : "El reporte aparecerá cuando el día completo (mañana, tarde y noche) haya cerrado."
+                }
+              />
             )
           ) : vista === "mover" ? (
             <div className="max-w-md animate-fade-up rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
@@ -1661,33 +1668,12 @@ export default function AdminPage() {
               <h3 className="mb-1 flex items-center gap-2 text-base font-bold">
                 <Settings className="h-4 w-4" /> Configuraciones
               </h3>
-              {!configUnlocked ? (
+              {!can("reset") && !can("backups-ver") && !can("backups-generar") ? (
                 <div className="space-y-3">
                   <p className="text-xs text-muted-foreground">
-                    Sección restringida. Ingresa la contraseña de
-                    configuraciones para continuar.
+                    No tienes permiso para ver esta sección. Pídele al dueño el
+                    permiso de backups o de reseteo del sistema.
                   </p>
-                  <Input
-                    type="password"
-                    placeholder="Contraseña"
-                    value={configPass}
-                    onChange={(e) => setConfigPass(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter") return;
-                      if (configPass === CONFIG_PASSWORD) setConfigUnlocked(true);
-                      else toast.error("Contraseña incorrecta");
-                    }}
-                    className="h-9"
-                  />
-                  <Button
-                    className="w-full"
-                    onClick={() => {
-                      if (configPass === CONFIG_PASSWORD) setConfigUnlocked(true);
-                      else toast.error("Contraseña incorrecta");
-                    }}
-                  >
-                    Entrar
-                  </Button>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1729,8 +1715,8 @@ export default function AdminPage() {
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div>
-                                <div className="font-semibold">
-                                  📅 {b.dia}
+                                <div className="flex items-center gap-1.5 font-semibold">
+                                  <CalendarDays className="h-3.5 w-3.5 shrink-0" /> {b.dia}
                                   {b.nota && (
                                     <span className="ml-1.5 rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-300">
                                       {b.nota}
@@ -1874,6 +1860,7 @@ export default function AdminPage() {
                     )}
                   </div>
 
+                  {can("reset") && (
                   <div className="rounded-lg border border-red-300 bg-red-50 p-3 dark:bg-red-950/30">
                     <h4 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-red-600">
                       <AlertTriangle className="h-4 w-4" /> Zona de pruebas
@@ -1894,6 +1881,7 @@ export default function AdminPage() {
                       Resetear base de datos
                     </Button>
                   </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2263,6 +2251,36 @@ function HistorialPrecios() {
   );
 }
 
+// Estado vacío reutilizable: icono en círculo + título + texto de ayuda.
+function EstadoVacio({
+  icon,
+  titulo,
+  texto,
+}: {
+  icon: React.ReactNode;
+  titulo: string;
+  texto?: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-card/50 px-6 py-16 text-center shadow-sm">
+      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+        {icon}
+      </span>
+      <p className="text-sm font-medium">{titulo}</p>
+      {texto && <p className="max-w-sm text-xs text-muted-foreground">{texto}</p>}
+    </div>
+  );
+}
+
+// Encabezado de grupo en el sidebar (Operación / Personal / Créditos / Sistema).
+function NavLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground first:pt-1">
+      {children}
+    </p>
+  );
+}
+
 function SideNav({
   activo,
   onClick,
@@ -2296,5 +2314,114 @@ function SideNav({
       </span>
       {label}
     </button>
+  );
+}
+
+// ===========================================================================
+// Portada de KPIs del día (vista "Turnos activos"): venta, efectivo esperado,
+// créditos y avance de turnos, comparado con el día operativo anterior.
+// ===========================================================================
+function PortadaKPIs({
+  remote,
+  precios,
+  activos,
+}: {
+  remote: Sesion[];
+  precios: Precios;
+  activos: number;
+}) {
+  const kpi = useMemo(() => {
+    const hoyOp = diaOperativoActual();
+    const ayerOp = diaMenos(hoyOp, 1);
+    const sesHoy = remote.filter((s) => diaOperativo(s) === hoyOp);
+    const sesAyer = remote.filter((s) => diaOperativo(s) === ayerOp);
+    return {
+      hoy: calcularReporteDia(sesHoy, hoyOp, precios),
+      ayer: calcularReporteDia(sesAyer, ayerOp, precios),
+      cerradosHoy: sesHoy.filter((s) => s.cerrada).length,
+    };
+  }, [remote, precios]);
+
+  // Variación % de la venta vs. el día anterior (null si ayer no tuvo venta).
+  const delta =
+    kpi.ayer.ventaTotal > 0.01
+      ? ((kpi.hoy.ventaTotal - kpi.ayer.ventaTotal) / kpi.ayer.ventaTotal) * 100
+      : null;
+
+  return (
+    <div className="mb-3 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+      <KpiCard
+        icon={<Banknote className="h-4 w-4" />}
+        label="Venta del día"
+        valor={soles(kpi.hoy.ventaTotal)}
+        pie={
+          delta == null ? (
+            <span className="text-muted-foreground">Sin venta ayer para comparar</span>
+          ) : (
+            <span
+              className={cn(
+                "flex items-center gap-1 font-medium",
+                delta >= 0 ? "text-emerald-600" : "text-red-600"
+              )}
+            >
+              {delta >= 0 ? (
+                <TrendingUp className="h-3.5 w-3.5" />
+              ) : (
+                <TrendingDown className="h-3.5 w-3.5" />
+              )}
+              {delta >= 0 ? "+" : ""}
+              {delta.toFixed(0)}% vs ayer
+            </span>
+          )
+        }
+      />
+      <KpiCard
+        icon={<Wallet className="h-4 w-4" />}
+        label="Efectivo esperado"
+        valor={soles(kpi.hoy.efectivoAEntregar)}
+        pie={<span className="text-muted-foreground">A entregar al encargado</span>}
+      />
+      <KpiCard
+        icon={<NotebookPen className="h-4 w-4" />}
+        label="Créditos del día"
+        valor={soles(kpi.hoy.totalCreditos)}
+        pie={<span className="text-muted-foreground">Vales a cuenta corriente</span>}
+      />
+      <KpiCard
+        icon={<Activity className="h-4 w-4" />}
+        label="Turnos"
+        valor={`${activos} activo${activos === 1 ? "" : "s"}`}
+        pie={
+          <span className="text-muted-foreground">
+            {kpi.cerradosHoy}/9 turnos cerrados hoy
+          </span>
+        }
+      />
+    </div>
+  );
+}
+
+function KpiCard({
+  icon,
+  label,
+  valor,
+  pie,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  valor: string;
+  pie?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-border/60 bg-card p-3 shadow-sm">
+      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+        <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          {icon}
+        </span>
+        {label}
+      </div>
+      <div className="mt-1.5 text-2xl font-extrabold tabular-nums">{valor}</div>
+      <div className="mt-0.5 text-[11px]">{pie}</div>
+    </div>
   );
 }

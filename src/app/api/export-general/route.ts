@@ -9,6 +9,7 @@ import {
   TURNO_NOMBRE,
 } from "@/server/reportes";
 import type { Precios, Sesion } from "@/lib/types";
+import { requirePermisoDeRequest } from "@/lib/server/supabase-admin";
 
 const MADRE_PATH = () =>
   path.join(process.cwd(), "src/server/templates/madre.xlsx");
@@ -40,6 +41,11 @@ function copiarHoja(
 
 export async function POST(req: NextRequest) {
   try {
+    try {
+      await requirePermisoDeRequest(req, "exportar");
+    } catch (e) {
+      return Response.json({ error: (e as Error).message }, { status: 403 });
+    }
     const { dia, sesiones, precios } = (await req.json()) as {
       dia: string;
       sesiones: Sesion[];

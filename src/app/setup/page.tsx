@@ -300,23 +300,40 @@ export default function SetupPage() {
       <Dialog open={confirmandoIsla} onOpenChange={setConfirmandoIsla}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Verifica que estés en la isla correcta</DialogTitle>
+            <DialogTitle>Confirma tu isla</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Toca la isla en la que estás físicamente. Si no coincide con la que
-            elegiste, tendrás que seleccionarla de nuevo.
+            Vas a abrir el turno en esta isla. Confirma que es donde estás
+            físicamente.
           </p>
-          <div className="mt-2 grid gap-2">
-            {ISLAS.map((isla) => (
-              <Button
-                key={isla.id}
-                variant="outline"
-                className="h-12 justify-center text-base font-semibold"
-                onClick={() => confirmarIsla(isla.id)}
-              >
-                {isla.nombre}
-              </Button>
-            ))}
+          {/* Isla elegida en grande: confirmación clara con Sí/No, en vez de
+              re-listar las 3 (menos toques, mismo control anti-error). */}
+          <div className="my-2 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-5 text-center">
+            <Fuel className="mx-auto mb-1.5 h-7 w-7 text-amber-500" />
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Isla seleccionada
+            </p>
+            <p className="text-2xl font-bold">
+              {sel ? ISLAS.find((i) => i.id === sel.islaId)?.nombre : ""}
+            </p>
+          </div>
+          <div className="grid gap-2">
+            <Button
+              className="h-12 bg-gradient-to-r from-amber-500 to-orange-600 text-base font-bold text-white hover:from-amber-400 hover:to-orange-500"
+              onClick={() => sel && confirmarIsla(sel.islaId)}
+            >
+              <CheckCircle2 className="mr-1.5 h-5 w-5" /> Sí, estoy en esta isla
+            </Button>
+            <Button
+              variant="outline"
+              className="h-11"
+              onClick={() => {
+                setConfirmandoIsla(false);
+                setSel(null);
+              }}
+            >
+              No, elegir otra
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

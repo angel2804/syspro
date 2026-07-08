@@ -116,6 +116,20 @@ export async function getAccessToken(): Promise<string | null> {
   return data.session?.access_token ?? null;
 }
 
+// Cabeceras HTTP con el access token de la sesión actual (para las rutas
+// /api/* que validan permiso en el servidor). Fusiona cabeceras extra (p. ej.
+// Content-Type). Si no hay sesión, va sin Authorization (el servidor responderá
+// 403).
+export async function authHeaders(
+  extra?: Record<string, string>
+): Promise<Record<string, string>> {
+  const token = await getAccessToken();
+  return {
+    ...(extra ?? {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
+
 export async function logoutSupabase(): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;

@@ -32,6 +32,19 @@ import type { Col } from "./registro-fields";
 import { ReporteRegistroModal, type Grupo } from "./reporte-registro-modal";
 import { cn } from "@/lib/utils";
 import {
+  CreditCard,
+  NotebookPen,
+  Gift,
+  Tag,
+  Banknote,
+  HandCoins,
+  Send,
+  Calculator,
+  Cylinder,
+  CheckCircle2,
+  type LucideIcon,
+} from "lucide-react";
+import {
   colsAdelanto,
   colsBalon,
   colsConteo,
@@ -268,7 +281,7 @@ export function ReporteDiaVista({
   const cards = [
     {
       tipo: "pagos" as Tipo,
-      icon: "💳",
+      icon: CreditCard as LucideIcon,
       titulo: "Pagos",
       n: filtradas.reduce((a, s) => a + s.pagos.length, 0),
       total: rep.totalElectronico,
@@ -280,7 +293,7 @@ export function ReporteDiaVista({
     },
     {
       tipo: "creditos" as Tipo,
-      icon: "📒",
+      icon: NotebookPen,
       titulo: "Créditos",
       n: filtradas.reduce((a, s) => a + s.creditos.length, 0),
       total: rep.totalCreditos,
@@ -308,7 +321,7 @@ export function ReporteDiaVista({
     },
     {
       tipo: "promociones" as Tipo,
-      icon: "🎁",
+      icon: Gift,
       titulo: "Promos",
       n: filtradas.reduce((a, s) => a + s.promociones.length, 0),
       total: rep.totalPromociones,
@@ -331,7 +344,7 @@ export function ReporteDiaVista({
     },
     {
       tipo: "descuentos" as Tipo,
-      icon: "🏷️",
+      icon: Tag,
       titulo: "Descuentos",
       n: filtradas.reduce((a, s) => a + s.descuentos.length, 0),
       total: rep.totalDescuentos,
@@ -349,7 +362,7 @@ export function ReporteDiaVista({
     },
     {
       tipo: "gastos" as Tipo,
-      icon: "💸",
+      icon: Banknote,
       titulo: "Gastos",
       n: filtradas.reduce((a, s) => a + s.gastos.length, 0),
       total: rep.totalGastos,
@@ -359,7 +372,7 @@ export function ReporteDiaVista({
     },
     {
       tipo: "adelantos" as Tipo,
-      icon: "💰",
+      icon: HandCoins,
       titulo: "Adelantos",
       n: filtradas.reduce((a, s) => a + s.adelantos.length, 0),
       total: rep.totalAdelantos,
@@ -369,7 +382,7 @@ export function ReporteDiaVista({
     },
     {
       tipo: "entregas" as Tipo,
-      icon: "📤",
+      icon: Send,
       titulo: "Entregas",
       n: filtradas.reduce((a, s) => a + (s.entregas?.length ?? 0), 0),
       total: rep.totalEntregado,
@@ -379,7 +392,7 @@ export function ReporteDiaVista({
     },
     {
       tipo: "conteos" as Tipo,
-      icon: "🧮",
+      icon: Calculator,
       titulo: "Efectivo contado",
       n: filtradas.reduce((a, s) => a + (s.conteos?.length ?? 0), 0),
       total: totalContado,
@@ -391,7 +404,7 @@ export function ReporteDiaVista({
       ? [
           {
             tipo: "balones" as Tipo,
-            icon: "🛢️",
+            icon: Cylinder,
             titulo: "Balones",
             n: filtradas.reduce((a, s) => a + (s.balones?.length ?? 0), 0),
             total: rep.totalBalones,
@@ -605,8 +618,8 @@ export function ReporteDiaVista({
             trigger={
               <button className="rounded-lg border bg-card p-3 text-left transition-colors hover:bg-accent">
                 <div className="flex items-center justify-between">
-                  <span className="font-medium">
-                    {c.icon} {c.titulo}
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <c.icon className="h-3.5 w-3.5 text-primary" /> {c.titulo}
                   </span>
                   <span className="text-muted-foreground">{c.n}</span>
                 </div>
@@ -747,8 +760,16 @@ function CuadreBloque({ diferencia }: { diferencia: number }) {
         falta ? "bg-amber-500/15" : "bg-green-500/15"
       )}
     >
-      <span className="text-sm font-semibold">
-        {cuadra ? "Cuadra ✓" : falta ? "Falta" : "Sobra"}
+      <span className="flex items-center gap-1.5 text-sm font-semibold">
+        {cuadra ? (
+          <>
+            <CheckCircle2 className="h-4 w-4" /> Cuadra
+          </>
+        ) : falta ? (
+          "Falta"
+        ) : (
+          "Sobra"
+        )}
       </span>
       <span
         className={cn(

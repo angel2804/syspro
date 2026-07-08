@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   construirEstadoCuenta,
   formatoSaldo,
+  precioEfectivoCredito,
   resumenCliente,
+  totalCredito,
   type CreditoCC,
   type PagoCC,
 } from "./cuenta-corriente";
@@ -35,6 +37,42 @@ function pago(p: Partial<PagoCC> & { monto: number; fecha: number }): PagoCC {
     ...p,
   };
 }
+
+describe("precio con descuento — la deuda usa el precio efectivo", () => {
+  it("precioAjustado (lápiz por vale) manda sobre todo", () => {
+    const c = credito({
+      total: 200,
+      fecha: 1,
+      galones: 10,
+      precioUnitario: 20,
+      precioClienteFijo: 19,
+      precioAjustado: 18,
+    });
+    expect(precioEfectivoCredito(c)).toBe(18);
+    expect(totalCredito(c)).toBe(180); // 10 * 18, no el total guardado (200)
+  });
+
+  it("sin ajuste por vale usa el precio fijo del cliente", () => {
+    const c = credito({ total: 200, fecha: 1, galones: 10, precioUnitario: 20, precioClienteFijo: 18 });
+    expect(precioEfectivoCredito(c)).toBe(18);
+    expect(totalCredito(c)).toBe(180);
+  });
+
+  it("sin descuentos respeta el total congelado", () => {
+    const c = credito({ total: 200, fecha: 1, galones: 10, precioUnitario: 20 });
+    expect(precioEfectivoCredito(c)).toBe(20);
+    expect(totalCredito(c)).toBe(200);
+  });
+
+  it("el descuento reduce la deuda del cliente", () => {
+    const creditos = [
+      credito({ total: 200, fecha: 1, galones: 10, precioUnitario: 20, precioClienteFijo: 18 }),
+    ];
+    const r = resumenCliente(creditos, []);
+    expect(r.totalCreditos).toBe(180);
+    expect(r.deudaPendiente).toBe(180);
+  });
+});
 
 describe("resumenCliente — deuda = créditos - pagos", () => {
   it("ejemplo del requerimiento: 850 créditos - 800 pagos = 50 deuda", () => {

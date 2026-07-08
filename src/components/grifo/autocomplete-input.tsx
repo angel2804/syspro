@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { Input } from "@/components/ui/input";
+import { User } from "lucide-react";
 import { normalizarCliente } from "@/lib/clientes";
 import { cn } from "@/lib/utils";
 
@@ -195,7 +196,7 @@ export function AutocompleteInput({
                 i === activo ? "bg-accent text-accent-foreground" : "hover:bg-accent/60"
               )}
             >
-              <span className="text-muted-foreground">👤</span>
+              <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               <span className="truncate">
                 <Resaltado texto={s} query={value} />
               </span>

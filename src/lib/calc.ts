@@ -117,8 +117,14 @@ export function calcularCuadre(s: Sesion, preciosGlobal: Precios): Cuadre {
   };
 }
 
+// Formato de moneda con separador de miles (es-PE): S/ 1,192.00 en vez de
+// S/ 1192.00. Con ventas diarias de 4–5 cifras los miles se leen mucho mejor.
+const FORMATO_SOLES = new Intl.NumberFormat("es-PE", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 export function soles(n: number): string {
-  return "S/ " + (n || 0).toFixed(2);
+  return "S/ " + FORMATO_SOLES.format(n || 0);
 }
 
 // ===== Reporte del día =====

@@ -6,8 +6,12 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { ADMIN_PASSWORD, getIsla, turnoLabel } from "@/lib/config";
-import { loginConPassword, loginTrabajadorCompartido } from "@/lib/data/auth";
+import { getIsla, turnoLabel } from "@/lib/config";
+import {
+  cargarPerfil,
+  loginConPassword,
+  loginTrabajadorCompartido,
+} from "@/lib/data/auth";
 import { hoy, useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import {
@@ -30,7 +34,10 @@ type Modo = "inicio" | "admin" | "trabajador";
 const REMEMBER_WORKER_KEY = "grifo-sys:remember-worker";
 const REMEMBER_ADMIN_KEY = "grifo-sys:remember-admin";
 
-type WorkerRemember = { email: string; password: string };
+// Solo se recuerda el EMAIL, nunca la contraseña. La comodidad de "no volver a
+// escribir la clave" la da la sesión persistente de Supabase (refresh token),
+// no un password en texto plano en localStorage.
+type WorkerRemember = { email: string };
 type AdminRemember = { email: string };
 
 function readJson<T>(key: string): T | null {
@@ -60,7 +67,7 @@ const FONDO_IMG: string | null = "/fondologin.png";
 
 // Duración de la intro de carga (ms). Solo se muestra una vez por sesión del
 // navegador; al volver al login dentro de la misma sesión, aparece directo.
-const LOAD_MS = 3200;
+const LOAD_MS = 1200;
 
 // Efecto ripple luminoso al hacer click (se posiciona en el punto del cursor).
 function ripple(e: React.PointerEvent<HTMLElement>) {
@@ -78,7 +85,6 @@ function ripple(e: React.PointerEvent<HTMLElement>) {
 
 export default function LoginPage() {
   const router = useRouter();
-  const loginAdmin = useStore((s) => s.loginAdmin);
   const setAuth = useStore((s) => s.setAuth);
   const setCurrentSesion = useStore((s) => s.setCurrentSesion);
   const sesiones = useStore((s) => s.sesiones);
@@ -98,6 +104,10 @@ export default function LoginPage() {
   const [recordarTrabajador, setRecordarTrabajador] = useState(true);
   const [trabListo, setTrabListo] = useState(false);
   const [trabUserId, setTrabUserId] = useState<string | undefined>(undefined);
+  // Si ya hay una sesión de Supabase de la cuenta compartida de trabajador
+  // (persistida del ingreso anterior), se puede saltar directo a elegir el
+  // nombre sin volver a escribir la contraseña.
+  const [sesionTrabActiva, setSesionTrabActiva] = useState(false);
 
   // Fases de la pantalla: carga inicial → destello → login listo.
   const [fase, setFase] = useState<"loading" | "ready">("loading");
@@ -128,13 +138,32 @@ export default function LoginPage() {
         setRecordarAdmin(true);
       }
       const worker = readJson<WorkerRemember>(REMEMBER_WORKER_KEY);
-      if (worker?.email && worker.password) {
+      if (worker?.email) {
         setTemail(worker.email);
-        setTpass(worker.password);
         setRecordarTrabajador(true);
       }
     }, 0);
     return () => window.clearTimeout(id);
+  }, [hydrated]);
+
+  // Reutiliza la sesión de Supabase ya persistida: si la cuenta compartida de
+  // trabajador sigue con sesión activa, no hace falta volver a escribir la
+  // contraseña; basta con elegir el nombre.
+  useEffect(() => {
+    if (!hydrated) return;
+    let vivo = true;
+    cargarPerfil()
+      .then((perfil) => {
+        if (!vivo || !perfil) return;
+        if (perfil.rol === "trabajador" && perfil.activo) {
+          setTrabUserId(perfil.id);
+          setSesionTrabActiva(true);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+    };
   }, [hydrated]);
 
   // Pasa de la pantalla de carga al login con un destello + zoom.
@@ -150,13 +179,6 @@ export default function LoginPage() {
 
   async function entrarAdmin() {
     if (cargando) return;
-    // Respaldo anti-lockout: sin correo + contraseña maestra → acceso total
-    // legacy (útil hasta crear los usuarios de Supabase Auth del dueño/admin).
-    if (!email.trim() && pass === ADMIN_PASSWORD) {
-      loginAdmin(null);
-      router.push("/admin");
-      return;
-    }
     setCargando(true);
     try {
       // Staff (dueño/admin/encargado) con email + contraseña vía Supabase Auth.
@@ -191,11 +213,11 @@ export default function LoginPage() {
       if (recordarTrabajador) {
         writeJson(REMEMBER_WORKER_KEY, {
           email: temail.trim(),
-          password: tpass,
         } satisfies WorkerRemember);
       } else {
         forgetKey(REMEMBER_WORKER_KEY);
       }
+      setSesionTrabActiva(true);
       setTrabUserId(perfil.id);
       setTrabListo(true); // pasa a elegir nombre real
     } catch (e) {
@@ -420,7 +442,12 @@ export default function LoginPage() {
 
                     <button
                       onPointerDown={ripple}
-                      onClick={() => setModo("trabajador")}
+                      onClick={() => {
+                        setModo("trabajador");
+                        // Si la cuenta compartida ya tiene sesión activa, no se
+                        // pide la contraseña otra vez: directo a elegir nombre.
+                        if (sesionTrabActiva) setTrabListo(true);
+                      }}
                       className="gs-ripple-host animate-slide-in-right group flex items-center gap-4 rounded-xl border border-orange-400/10 bg-white/[0.03] p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-400/40 hover:bg-orange-400/[0.07] hover:shadow-[0_12px_40px_-16px_rgba(249,115,22,0.45)] active:scale-[0.98]"
                     >
                       <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-orange-500/15 text-orange-200 transition-all duration-200 group-hover:scale-105 group-hover:bg-orange-500/25">
@@ -450,12 +477,13 @@ export default function LoginPage() {
                     />
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-amber-50/80">
+                      <label htmlFor="admin-email" className="text-sm font-medium text-amber-50/80">
                         Correo
                       </label>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-200/50" />
                         <Input
+                          id="admin-email"
                           type="email"
                           value={email}
                           autoFocus
@@ -469,12 +497,13 @@ export default function LoginPage() {
                     </div>
 
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-amber-50/80">
+                      <label htmlFor="admin-pass" className="text-sm font-medium text-amber-50/80">
                         Contraseña
                       </label>
                       <div className="relative">
                         <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-200/50" />
                         <Input
+                          id="admin-pass"
                           type="password"
                           value={pass}
                           autoComplete="current-password"
@@ -523,12 +552,13 @@ export default function LoginPage() {
                       }}
                     />
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-orange-50/80">
+                      <label htmlFor="trab-email" className="text-sm font-medium text-orange-50/80">
                         Correo de trabajador
                       </label>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-orange-200/50" />
                         <Input
+                          id="trab-email"
                           type="email"
                           value={temail}
                           autoFocus
@@ -541,12 +571,13 @@ export default function LoginPage() {
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-orange-50/80">
+                      <label htmlFor="trab-pass" className="text-sm font-medium text-orange-50/80">
                         Contraseña
                       </label>
                       <div className="relative">
                         <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-orange-200/50" />
                         <Input
+                          id="trab-pass"
                           type="password"
                           value={tpass}
                           autoComplete="current-password"
@@ -593,7 +624,10 @@ export default function LoginPage() {
                   <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
                     <BackBtn
                       onClick={() => {
-                        setTrabListo(false);
+                        // Con sesión activa no hay paso de contraseña al que
+                        // volver: se regresa al inicio.
+                        if (sesionTrabActiva) setModo("inicio");
+                        else setTrabListo(false);
                         if (!recordarTrabajador) setTpass("");
                       }}
                     />

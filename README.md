@@ -74,10 +74,22 @@ sincronizan al reconectar.
 | **admin** | Reportes, precios (si tiene permiso), mover trabajador (si tiene permiso), exportar, **registrar pagos de crédito**, gestionar clientes (si tiene permiso). |
 | **trabajador** | Abrir/cerrar su turno, registrar datos y **créditos** (no pagos), ver solo su turno activo. |
 
-En las Fases 1–3 el acceso sigue siendo por nombre/contraseña (variables
-`NEXT_PUBLIC_ADMIN_PASSWORD` / `NEXT_PUBLIC_CONFIG_PASSWORD`). En la **Fase 4**
-se migra a **Supabase Auth** con la tabla `profiles` (rol + permisos) y la
-validación deja de ser solo de UI.
+El acceso es **siempre por Supabase Auth** (email + contraseña para el staff;
+cuenta compartida para trabajadores) con la tabla `profiles` (rol + permisos);
+la validación real la da la **RLS por rol/permiso** en la base de datos. Ya
+**no existen** contraseñas embebidas en el cliente (`NEXT_PUBLIC_ADMIN_PASSWORD`
+/ `NEXT_PUBLIC_CONFIG_PASSWORD` fueron eliminadas): crea al primer dueño desde
+`/bootstrap` antes de desplegar, y usa el correo de recuperación de Supabase si
+olvidas la contraseña. La sección "Configuraciones" (backups/reset) se protege
+con los permisos `backups-*` / `reset` del perfil.
+
+> **Migraciones a aplicar** (SQL Editor de Supabase, en orden):
+> `supabase/08-rls-anular-creditos.sql` (endurece la anulación de créditos),
+> `supabase/09-retencion-cron.sql` (archiva días viejos con `pg_cron`, sin
+> borrar historial; retención en caliente **365 días**, antes 7) y
+> `supabase/10-creditos-grupos-precio.sql` (precio con descuento por cliente/
+> vale y grupos de sub-clientes tipo REDCOL). La `10` reemplaza la política de
+> créditos de la `08`, así que si aplicas ambas, corre la `10` al final.
 
 ## 6. Límites del plan gratuito
 

@@ -5,12 +5,18 @@ import { calcularCuadre } from "@/lib/calc";
 import { ISLAS } from "@/lib/config";
 import { llenarHojaIsla } from "@/server/reportes";
 import type { Precios, Sesion } from "@/lib/types";
+import { requirePermisoDeRequest } from "@/lib/server/supabase-admin";
 
 const EPS = 0.01;
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
 export async function POST(req: NextRequest) {
   try {
+    try {
+      await requirePermisoDeRequest(req, "exportar");
+    } catch (e) {
+      return Response.json({ error: (e as Error).message }, { status: 403 });
+    }
     const { dia, turno, sesiones, precios } = (await req.json()) as {
       dia: string;
       turno: "manana" | "tarde" | "noche";
