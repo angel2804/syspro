@@ -28,6 +28,19 @@ drop policy if exists audit_delete on public.audit_log;
 create policy audit_delete on public.audit_log
   for delete using (public.es_admin());
 
+-- INVENTARIO DE TANQUES: borrar = dueÃ±o/admin o permiso reset.
+drop policy if exists tanque_registros_delete on public.tanque_registros;
+create policy tanque_registros_delete on public.tanque_registros
+  for delete using (public.es_admin() or public.tiene_permiso('reset'));
+
+drop policy if exists tanque_capacidades_delete on public.tanque_capacidades;
+create policy tanque_capacidades_delete on public.tanque_capacidades
+  for delete using (public.es_admin() or public.tiene_permiso('reset'));
+
+drop policy if exists tanque_recargas_delete on public.tanque_recargas;
+create policy tanque_recargas_delete on public.tanque_recargas
+  for delete using (public.es_admin() or public.tiene_permiso('reset'));
+
 -- Nota: `pagos_credito` ya se puede borrar con permiso 'pagos-credito'
 -- (política pagos_credito_write = for all). `clientes` con permiso 'clientes'
 -- (clientes_delete). `cliente_alias` con permiso 'clientes' (cliente_alias_del)

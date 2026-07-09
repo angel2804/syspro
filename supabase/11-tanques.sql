@@ -68,6 +68,10 @@ drop policy if exists tanque_registros_insert on public.tanque_registros;
 create policy tanque_registros_insert on public.tanque_registros
   for insert with check (public.es_admin() or public.tiene_permiso('inventario'));
 
+drop policy if exists tanque_registros_delete on public.tanque_registros;
+create policy tanque_registros_delete on public.tanque_registros
+  for delete using (public.es_admin() or public.tiene_permiso('reset'));
+
 drop policy if exists tanque_capacidades_select on public.tanque_capacidades;
 create policy tanque_capacidades_select on public.tanque_capacidades
   for select using (public.es_admin() or public.tiene_permiso('inventario'));
@@ -81,6 +85,10 @@ create policy tanque_capacidades_update on public.tanque_capacidades
   for update using (public.es_admin() or public.tiene_permiso('inventario'))
   with check (public.es_admin() or public.tiene_permiso('inventario'));
 
+drop policy if exists tanque_capacidades_delete on public.tanque_capacidades;
+create policy tanque_capacidades_delete on public.tanque_capacidades
+  for delete using (public.es_admin() or public.tiene_permiso('reset'));
+
 drop policy if exists tanque_recargas_select on public.tanque_recargas;
 create policy tanque_recargas_select on public.tanque_recargas
   for select using (public.es_admin() or public.tiene_permiso('inventario'));
@@ -88,3 +96,7 @@ create policy tanque_recargas_select on public.tanque_recargas
 drop policy if exists tanque_recargas_insert on public.tanque_recargas;
 create policy tanque_recargas_insert on public.tanque_recargas
   for insert with check (public.es_admin() or public.tiene_permiso('inventario'));
+
+drop policy if exists tanque_recargas_delete on public.tanque_recargas;
+create policy tanque_recargas_delete on public.tanque_recargas
+  for delete using (public.es_admin() or public.tiene_permiso('reset'));

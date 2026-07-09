@@ -102,17 +102,20 @@ export async function deleteTodasSesiones(): Promise<void> {
 export async function resetPruebasCompleto(): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
-  const tablasEnOrden = [
-    "pagos_credito",
-    "creditos",
-    "sesiones",
-    "cliente_alias",
-    "clientes",
-    "precio_eventos",
-    "audit_log",
+  const borrados: Array<{ tabla: string; columna: string; valor: number }> = [
+    { tabla: "pagos_credito", columna: "created_at", valor: 0 },
+    { tabla: "creditos", columna: "created_at", valor: 0 },
+    { tabla: "sesiones", columna: "created_at", valor: 0 },
+    { tabla: "tanque_recargas", columna: "created_at", valor: 0 },
+    { tabla: "tanque_registros", columna: "created_at", valor: 0 },
+    { tabla: "tanque_capacidades", columna: "updated_at", valor: 0 },
+    { tabla: "cliente_alias", columna: "created_at", valor: 0 },
+    { tabla: "clientes", columna: "created_at", valor: 0 },
+    { tabla: "precio_eventos", columna: "created_at", valor: 0 },
+    { tabla: "audit_log", columna: "created_at", valor: 0 },
   ];
-  for (const tabla of tablasEnOrden) {
-    const { error } = await sb.from(tabla).delete().gte("created_at", 0);
+  for (const { tabla, columna, valor } of borrados) {
+    const { error } = await sb.from(tabla).delete().gte(columna, valor);
     if (error) throw error;
   }
   // La lista de autocompletado de clientes (config/clientes) también se vacía;

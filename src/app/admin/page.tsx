@@ -1458,9 +1458,10 @@ export default function AdminPage() {
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             Esta acción no se puede deshacer. Se borrará TODO (turnos, créditos,
-            pagos, clientes, historial de precios y auditoría) para dejar el
-            sistema de cero. Se conservan las copias de seguridad, las cuentas de
-            usuario y la configuración (precios/trabajadores).
+            pagos, clientes, inventario de tanques, historial de precios y
+            auditoría) para dejar el sistema de cero. Se conservan las copias de
+            seguridad, las cuentas de usuario y la configuración
+            (precios/trabajadores).
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmandoReset(false)}>
@@ -1514,4 +1515,3 @@ export default function AdminPage() {
     </div>
   );
 }
-

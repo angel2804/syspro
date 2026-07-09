@@ -284,8 +284,8 @@ export function VistaConfig({
               </h4>
               <p className="mb-3 text-xs text-muted-foreground">
                 Borra TODO para probar el sistema de cero: turnos, créditos,
-                pagos, clientes, historial de precios y auditoría. NO se borran
-                las copias de seguridad, las cuentas de usuario
+                pagos, clientes, inventario de tanques, historial de precios y
+                auditoría. NO se borran las copias de seguridad, las cuentas de usuario
                 (dueño/admin/trabajador) ni la configuración (precios y lista de
                 trabajadores).
               </p>
