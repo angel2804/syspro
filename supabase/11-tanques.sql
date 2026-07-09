@@ -22,12 +22,12 @@ create index if not exists tanque_registros_producto_fecha_idx
 
 alter table public.tanque_registros enable row level security;
 
--- Solo staff con permiso 'config' (o admin/dueño) puede ver y registrar. Esta
+-- Solo staff con permiso 'inventario' (o admin/dueño) puede ver y registrar. Esta
 -- sección no la usa el trabajador de turno.
 drop policy if exists tanque_registros_select on public.tanque_registros;
 create policy tanque_registros_select on public.tanque_registros
-  for select using (public.es_admin() or public.tiene_permiso('config'));
+  for select using (public.es_admin() or public.tiene_permiso('inventario'));
 
 drop policy if exists tanque_registros_insert on public.tanque_registros;
 create policy tanque_registros_insert on public.tanque_registros
-  for insert with check (public.es_admin() or public.tiene_permiso('config'));
+  for insert with check (public.es_admin() or public.tiene_permiso('inventario'));

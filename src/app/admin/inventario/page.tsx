@@ -5,7 +5,7 @@
 // para restar del último nivel medido por el medidor, y muestra estadísticas
 // de consumo. Es un panel de lectura + un formulario de registro semanal que
 // escribe únicamente en la tabla aislada `tanque_registros`.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ArrowLeft, Droplet, Save } from "lucide-react";
@@ -44,17 +44,97 @@ const CAPACIDAD_DEFAULT: Record<ProductoId, number> = {
   glp: 10000,
 };
 
-const COLOR_TANQUE: Record<ProductoId, { barra: string; texto: string }> = {
-  bio: { barra: "bg-emerald-500", texto: "text-emerald-600" },
-  regular: { barra: "bg-sky-500", texto: "text-sky-600" },
-  premium: { barra: "bg-amber-500", texto: "text-amber-600" },
-  glp: { barra: "bg-violet-500", texto: "text-violet-600" },
+const COLOR_TANQUE: Record<
+  ProductoId,
+  {
+    texto: string;
+    chip: string;
+    liquid: string;
+    liquidSoft: string;
+    glow: string;
+  }
+> = {
+  bio: {
+    texto: "text-zinc-600 dark:text-zinc-300",
+    chip: "bg-zinc-500/10 text-zinc-700 ring-zinc-500/20 dark:text-zinc-200",
+    liquid: "#71717a",
+    liquidSoft: "#d4d4d8",
+    glow: "shadow-zinc-500/20",
+  },
+  regular: {
+    texto: "text-green-600 dark:text-green-300",
+    chip: "bg-green-500/10 text-green-700 ring-green-500/20 dark:text-green-200",
+    liquid: "#16a34a",
+    liquidSoft: "#86efac",
+    glow: "shadow-green-500/20",
+  },
+  premium: {
+    texto: "text-sky-600 dark:text-sky-300",
+    chip: "bg-sky-500/10 text-sky-700 ring-sky-500/20 dark:text-sky-200",
+    liquid: "#0284c7",
+    liquidSoft: "#7dd3fc",
+    glow: "shadow-sky-500/20",
+  },
+  glp: {
+    texto: "text-orange-600 dark:text-orange-300",
+    chip: "bg-orange-500/10 text-orange-700 ring-orange-500/20 dark:text-orange-200",
+    liquid: "#ea580c",
+    liquidSoft: "#fdba74",
+    glow: "shadow-orange-500/20",
+  },
 };
 
 const gal = (n: number) => `${n.toLocaleString("es-PE", { maximumFractionDigits: 0 })} gal`;
 
+function TanqueVisual({
+  pct,
+  color,
+}: {
+  pct: number;
+  color: (typeof COLOR_TANQUE)[ProductoId];
+}) {
+  return (
+    <div
+      className={`tank-glass relative mx-auto mt-4 h-44 w-full max-w-48 overflow-hidden rounded-[1.75rem] border border-white/50 bg-white/35 shadow-2xl ${color.glow} ring-1 ring-black/5 backdrop-blur-md dark:border-white/15 dark:bg-white/10 dark:ring-white/10`}
+      style={
+        {
+          "--tank-fill": `${pct}%`,
+          "--tank-liquid": color.liquid,
+          "--tank-liquid-soft": color.liquidSoft,
+        } as CSSProperties
+      }
+      aria-label={`Tanque al ${pct}%`}
+    >
+      <div className="pointer-events-none absolute inset-y-5 left-3 z-20 flex flex-col justify-between">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <span key={i} className="block h-px w-5 bg-foreground/25" />
+        ))}
+      </div>
+      <div className="pointer-events-none absolute inset-y-5 right-3 z-20 flex flex-col justify-between">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <span key={i} className="block h-px w-3 bg-foreground/18" />
+        ))}
+      </div>
+      <div className="absolute inset-x-6 top-4 z-20 h-8 rounded-full bg-white/30 blur-sm dark:bg-white/15" />
+      <div className="absolute inset-0 z-20 bg-[linear-gradient(105deg,rgba(255,255,255,0.45),transparent_24%,transparent_70%,rgba(255,255,255,0.22))]" />
+      <div className="tank-liquid absolute inset-x-0 bottom-0 z-10">
+        <div className="tank-wave tank-wave-a" />
+        <div className="tank-wave tank-wave-b" />
+      </div>
+      <div className="absolute inset-0 z-30 flex flex-col items-center justify-center text-center">
+        <span className="text-4xl font-black tabular-nums tracking-normal text-foreground drop-shadow-sm">
+          {pct}%
+        </span>
+        <span className="mt-1 text-[11px] font-medium uppercase tracking-normal text-muted-foreground">
+          nivel visual
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function InventarioTanquesPage() {
-  const { listo, permitido } = usePermisoGuard("config");
+  const { listo, permitido } = usePermisoGuard("inventario");
   const precios = useStore((s) => s.precios);
 
   const [registros, setRegistros] = useState<TanqueRegistro[]>([]);
@@ -205,22 +285,31 @@ export default function InventarioTanquesPage() {
           const pct = r ? Math.min(100, Math.round((r.estimado / r.capacidadMax) * 100)) : null;
           const c = COLOR_TANQUE[p];
           return (
-            <div key={p} className="rounded-xl border bg-card p-4">
-              <div className="flex items-center justify-between">
-                <span className={`text-sm font-bold ${c.texto}`}>{PRODUCTOS[p]}</span>
-                {r && <span className="text-xs text-muted-foreground">máx {gal(r.capacidadMax)}</span>}
+            <div
+              key={p}
+              className="gs-card overflow-hidden rounded-2xl border border-border/60 bg-card p-4 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <span className={`block truncate text-sm font-extrabold uppercase tracking-normal ${c.texto}`}>{PRODUCTOS[p]}</span>
+                  {r && (
+                    <span className="mt-1 block text-[11px] text-muted-foreground">
+                      Capacidad maxima {gal(r.capacidadMax)}
+                    </span>
+                  )}
+                </div>
+                {r && (
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${c.chip}`}>
+                    {pct ?? 0}%
+                  </span>
+                )}
               </div>
               {r ? (
                 <>
-                  <div className="mt-3 h-3 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={`h-full ${c.barra} transition-all`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <div className="mt-2 flex items-baseline gap-1.5">
-                    <span className="text-xl font-extrabold tabular-nums">{gal(r.estimado)}</span>
-                    <span className="text-xs text-muted-foreground">({pct}%)</span>
+                  <TanqueVisual pct={pct ?? 0} color={c} />
+                  <div className="mt-3 text-center">
+                    <span className="text-2xl font-extrabold tabular-nums">{gal(r.estimado)}</span>
+                    <div className="mt-1 text-xs text-muted-foreground">Cantidad actual estimada</div>
                   </div>
                   <div className="mt-1 text-[11px] text-muted-foreground">
                     Medido {gal(r.nivelMedido)} el {r.fechaMedicion} · −{gal(galonesHoy[p])} vendido hoy

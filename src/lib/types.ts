@@ -52,6 +52,7 @@ export type Permiso =
   | "backups-generar" // generar backups
   | "config" // ver configuraciones
   | "config-datos" // cambiar logo/datos del grifo
+  | "inventario" // ver inventario de tanques (referencia visual)
   | "reset"; // resetear sistema
 
 // Administrador con nombre y contraseña, gestionado por el desarrollador en

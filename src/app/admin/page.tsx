@@ -1092,7 +1092,7 @@ export default function AdminPage() {
                 Créditos por cliente
               </Link>
             )}
-            {(can("exportar") || can("config") || can("auditoria")) && (
+            {(can("exportar") || can("config") || can("auditoria") || can("inventario")) && (
               <NavLabel>Sistema</NavLabel>
             )}
             {can("exportar") && (
@@ -1122,7 +1122,7 @@ export default function AdminPage() {
                 Auditoría
               </Link>
             )}
-            {can("config") && (
+            {can("inventario") && (
               <Link
                 href="/admin/inventario"
                 className="group relative flex w-full items-center gap-2 overflow-hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground transition-all duration-200 hover:translate-x-0.5 hover:bg-accent"
