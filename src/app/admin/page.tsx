@@ -44,6 +44,10 @@ import {
   registrarCambioPrecio,
   type PrecioEvento,
 } from "@/lib/data/precios";
+import {
+  fetchUltimosRegistrosTanques,
+  type TanqueRegistro,
+} from "@/lib/data/tanques";
 import { registrarAuditoria } from "@/lib/data/auditoria";
 import {
   BALONES,
@@ -66,7 +70,7 @@ import {
   turnosCompletosDeDia,
   turnosConAlgunaIslaCerrada,
 } from "@/lib/calc";
-import type { Permiso, PrecioKey, Precios, Rol, Sesion, TurnoId } from "@/lib/types";
+import type { Permiso, PrecioKey, Precios, ProductoId, Rol, Sesion, TurnoId } from "@/lib/types";
 import { cn, descargarBlob } from "@/lib/utils";
 import { SesionVista } from "@/components/grifo/sesion-vista";
 import { ReporteDiaVista } from "@/components/grifo/reporte-dia-vista";
@@ -83,6 +87,7 @@ import {
   LogOut,
   Wifi,
   Activity,
+  BarChart3,
   CalendarDays,
   Tag,
   Users,
@@ -116,6 +121,7 @@ import Link from "next/link";
 const DIAS_A_CONSERVAR = 365;
 
 type Vista =
+  | "estadisticas"
   | "activos"
   | "reporte"
   | "mover"
@@ -181,7 +187,7 @@ export default function AdminPage() {
   // export. Reemplaza a los dos onSnapshot de Firestore por una suscripción
   // Realtime de Supabase.
   const [remoteList, setRemoteList] = useState<Sesion[]>([]);
-  const [vista, setVista] = useState<Vista>("activos");
+  const [vista, setVista] = useState<Vista>("estadisticas");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedDia, setSelectedDia] = useState<string | null>(null);
   const [exportTurno, setExportTurno] = useState<TurnoId>("manana");
@@ -213,6 +219,7 @@ export default function AdminPage() {
   const [creandoBackup, setCreandoBackup] = useState(false);
   const [restaurandoId, setRestaurandoId] = useState<string | null>(null);
   const [backupARestaurar, setBackupARestaurar] = useState<Backup | null>(null);
+  const [tanques, setTanques] = useState<TanqueRegistro[]>([]);
   const hydrated = useHydrated();
 
   // Acceso al panel: dueño, admin o encargado (staff). El trabajador no entra.
@@ -230,10 +237,12 @@ export default function AdminPage() {
     [auth?.permisos]
   );
   const can = (p: Permiso) => permisos.includes(p);
+  const puedeVerEstadisticas = can("activos") || can("reporte");
 
   // Si la vista actual no está permitida (p. ej. tras cargar permisos), saltar
   // a la primera vista que sí lo esté. "venta-normal" no es una vista propia.
   useEffect(() => {
+    if (vista === "estadisticas" && puedeVerEstadisticas) return;
     if (can(vista as Permiso)) return;
     const primera = PERMISOS_TODOS.find(
       (p) => p !== "venta-normal" && permisos.includes(p)
@@ -243,7 +252,22 @@ export default function AdminPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (primera) setVista(primera as Vista);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [permisos, vista]);
+  }, [permisos, vista, puedeVerEstadisticas]);
+
+  useEffect(() => {
+    if (!hydrated || !auth || !esStaff(auth.rol) || !puedeVerEstadisticas) return;
+    let vivo = true;
+    fetchUltimosRegistrosTanques()
+      .then((rows) => {
+        if (vivo) setTanques(rows);
+      })
+      .catch(() => {
+        if (vivo) setTanques([]);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [hydrated, auth, puedeVerEstadisticas]);
 
   // Suscripción en vivo a los últimos 60 días operativos (turnos activos +
   // días recientes para reporte/export), vía Supabase Realtime.
@@ -1039,6 +1063,14 @@ export default function AdminPage() {
         <aside className="w-56 shrink-0 border-r bg-sidebar p-3">
           <nav className="mb-3 space-y-1">
             {(can("activos") || can("reporte")) && <NavLabel>Operación</NavLabel>}
+            {puedeVerEstadisticas && (
+              <SideNav
+                activo={vista === "estadisticas"}
+                onClick={() => setVista("estadisticas")}
+                icon={<BarChart3 className="h-4 w-4" />}
+                label="Estadisticas"
+              />
+            )}
             {can("activos") && (
               <SideNav
                 activo={vista === "activos"}
@@ -1199,9 +1231,15 @@ export default function AdminPage() {
 
         {/* Contenido */}
         <main className="flex-1 p-3">
-          {vista === "activos" ? (
+          {vista === "estadisticas" ? (
+            <EstadisticasSistema
+              remote={remote}
+              precios={precios}
+              activos={activos.length}
+              tanques={tanques}
+            />
+          ) : vista === "activos" ? (
             <>
-              <PortadaKPIs remote={remote} precios={precios} activos={activos.length} />
               <div className="mb-3 flex gap-2">
                 {ISLAS.map((isla) => {
                   const activa = activos.find((s) => s.islaId === isla.id);
@@ -2333,14 +2371,25 @@ function SideNav({
 // Portada de KPIs del día (vista "Turnos activos"): venta, efectivo esperado,
 // créditos y avance de turnos, comparado con el día operativo anterior.
 // ===========================================================================
-function PortadaKPIs({
+const PRODUCTOS_IDS_RESUMEN: ProductoId[] = ["bio", "regular", "premium", "glp"];
+
+const PRODUCTO_RESUMEN_COLOR: Record<ProductoId, { text: string; bar: string }> = {
+  bio: { text: "text-zinc-600 dark:text-zinc-300", bar: "bg-zinc-500" },
+  regular: { text: "text-green-600 dark:text-green-300", bar: "bg-green-500" },
+  premium: { text: "text-sky-600 dark:text-sky-300", bar: "bg-sky-500" },
+  glp: { text: "text-orange-600 dark:text-orange-300", bar: "bg-orange-500" },
+};
+
+function EstadisticasSistema({
   remote,
   precios,
   activos,
+  tanques,
 }: {
   remote: Sesion[];
   precios: Precios;
   activos: number;
+  tanques: TanqueRegistro[];
 }) {
   const kpi = useMemo(() => {
     const hoyOp = diaOperativoActual();
@@ -2351,6 +2400,7 @@ function PortadaKPIs({
       hoy: calcularReporteDia(sesHoy, hoyOp, precios),
       ayer: calcularReporteDia(sesAyer, ayerOp, precios),
       cerradosHoy: sesHoy.filter((s) => s.cerrada).length,
+      hoyOp,
     };
   }, [remote, precios]);
 
@@ -2359,9 +2409,27 @@ function PortadaKPIs({
     kpi.ayer.ventaTotal > 0.01
       ? ((kpi.hoy.ventaTotal - kpi.ayer.ventaTotal) / kpi.ayer.ventaTotal) * 100
       : null;
+  const galonesHoy = PRODUCTOS_IDS_RESUMEN.map((producto) => ({
+    producto,
+    galones: kpi.hoy.porProducto.find((f) => f.producto === producto)?.galones ?? 0,
+  }));
+  const totalGalones = galonesHoy.reduce((a, p) => a + p.galones, 0);
 
   return (
-    <div className="mb-3 grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+    <section className="space-y-4">
+      <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-lg font-bold">Estadisticas del sistema</h2>
+            <p className="text-xs text-muted-foreground">
+              Resumen operativo del dia {kpi.hoyOp}
+            </p>
+          </div>
+          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+            Vista general
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
       <KpiCard
         icon={<Banknote className="h-4 w-4" />}
         label="Venta del día"
@@ -2409,7 +2477,87 @@ function PortadaKPIs({
           </span>
         }
       />
-    </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
+        <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="font-semibold">Venta por combustible</h3>
+            <span className="text-xs text-muted-foreground">
+              {totalGalones.toLocaleString("es-PE", { maximumFractionDigits: 1 })} gal
+            </span>
+          </div>
+          <div className="space-y-3">
+            {galonesHoy.map(({ producto, galones }) => {
+              const pct = totalGalones > 0 ? Math.round((galones / totalGalones) * 100) : 0;
+              return (
+                <div key={producto}>
+                  <div className="mb-1 flex items-center justify-between text-sm">
+                    <span className={`font-medium ${PRODUCTO_RESUMEN_COLOR[producto].text}`}>
+                      {PRODUCTOS[producto]}
+                    </span>
+                    <span className="tabular-nums">
+                      {galones.toLocaleString("es-PE", { maximumFractionDigits: 1 })} gal
+                    </span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className={`h-full rounded-full ${PRODUCTO_RESUMEN_COLOR[producto].bar}`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="font-semibold">Resumen de tanques</h3>
+            <Link href="/admin/inventario" className="text-xs font-medium text-primary hover:underline">
+              Ver inventario
+            </Link>
+          </div>
+          {tanques.length === 0 ? (
+            <p className="rounded-xl border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
+              Todavia no hay mediciones registradas.
+            </p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {PRODUCTOS_IDS_RESUMEN.map((producto) => {
+                const registro = tanques.find((t) => t.producto === producto);
+                if (!registro) return null;
+                const vendidos = galonesHoy.find((g) => g.producto === producto)?.galones ?? 0;
+                const actual = Math.max(0, registro.nivelMedido - vendidos);
+                const pct = Math.min(100, Math.round((actual / registro.capacidadMax) * 100));
+                return (
+                  <div key={producto} className="rounded-xl border bg-muted/20 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className={`text-sm font-bold ${PRODUCTO_RESUMEN_COLOR[producto].text}`}>
+                        {PRODUCTOS[producto]}
+                      </span>
+                      <span className="text-xs font-semibold tabular-nums">{pct}%</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-background">
+                      <div
+                        className={`h-full rounded-full ${PRODUCTO_RESUMEN_COLOR[producto].bar}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>{actual.toLocaleString("es-PE", { maximumFractionDigits: 0 })} gal</span>
+                      <span>max {registro.capacidadMax.toLocaleString("es-PE")} gal</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
   );
 }
 

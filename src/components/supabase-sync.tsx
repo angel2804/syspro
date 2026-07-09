@@ -190,7 +190,11 @@ export function SupabaseSync() {
     };
 
     const unsub = subscribeSesiones(cutoff, aplicar);
-    const poll = setInterval(refetch, 3000);
+    // Realtime ya refresca ante cada cambio (aplicando solo la fila que cambió,
+    // ver subscribeSesiones); este sondeo es un respaldo por si el canal se cae.
+    // A 60s (antes 3s) reduce ~20x el ancho de banda del plan gratuito con la
+    // pantalla del trabajador abierta todo el turno.
+    const poll = setInterval(refetch, 60000);
 
     return () => {
       clearInterval(poll);

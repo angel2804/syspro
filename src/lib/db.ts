@@ -9,7 +9,7 @@
 //                     isla_id/turno/dia_operativo son NOT NULL (espejo indexable).
 //   tabla `config`:   key text pk, value jsonb  ('precios' | 'trabajadores')
 import { getSupabase } from "./supabase";
-import { diaOperativo, diaOperativoActual, turnoCompleto } from "./calc";
+import { diaMenos, diaOperativo, diaOperativoActual, turnoCompleto } from "./calc";
 import { aprenderClientes } from "./clientes";
 import type { Admin, Precios, Sesion, TurnoId } from "./types";
 
@@ -52,14 +52,6 @@ export async function fetchSesionesDesde(corte: string): Promise<Sesion[]> {
     .from("sesiones")
     .select("data")
     .gte("dia_operativo", corte);
-  if (error) throw error;
-  return (data ?? []).map((r) => sesionDeFila(r as { data: Sesion }));
-}
-
-export async function fetchTodasSesiones(): Promise<Sesion[]> {
-  const sb = getSupabase();
-  if (!sb) return [];
-  const { data, error } = await sb.from("sesiones").select("data");
   if (error) throw error;
   return (data ?? []).map((r) => sesionDeFila(r as { data: Sesion }));
 }
@@ -129,9 +121,13 @@ export async function resetPruebasCompleto(): Promise<void> {
   await setConfig("clientes_descuento", { nombres: [] });
 }
 
-// Suscripción en vivo a una ventana de días. Trae el estado inicial y luego
-// re-consulta (debounced) ante cualquier cambio en la tabla. Reemplaza al
-// `onSnapshot` de Firestore. Devuelve una función para desuscribir.
+// Suscripción en vivo a una ventana de días. Trae el estado inicial UNA vez y
+// luego mantiene la ventana en memoria aplicando SOLO la fila que cambió desde
+// el payload del Realtime — sin volver a descargar toda la ventana en cada
+// cambio. Antes hacía un refetch por evento: con varios dispositivos activos y
+// el autoguardado del trabajador (~1 escritura/seg), eso era el mayor
+// consumidor de ancho de banda del plan gratuito. Reemplaza al `onSnapshot` de
+// Firestore. Devuelve una función para desuscribir.
 export function subscribeSesiones(
   corte: string,
   onChange: (sesiones: Sesion[]) => void
@@ -139,35 +135,56 @@ export function subscribeSesiones(
   const sb = getSupabase();
   if (!sb) return () => {};
   let cancelado = false;
-  let timer: ReturnType<typeof setTimeout> | null = null;
 
-  const refetch = async () => {
+  // Estado local de la ventana [corte, hoy]. Se siembra con una consulta
+  // inicial y de ahí en adelante se actualiza in-place con cada payload.
+  const porId = new Map<string, Sesion>();
+  const emitir = () => {
+    if (!cancelado) onChange(Array.from(porId.values()));
+  };
+
+  const sembrar = async () => {
     try {
       const lista = await fetchSesionesDesde(corte);
-      if (!cancelado) onChange(lista);
+      if (cancelado) return;
+      porId.clear();
+      for (const s of lista) porId.set(s.id, s);
+      emitir();
     } catch {
       /* silencioso: la UI conserva el último estado conocido */
     }
   };
-  const refetchDebounced = () => {
-    if (timer) clearTimeout(timer);
-    timer = setTimeout(refetch, 250);
-  };
-
-  refetch(); // estado inicial
+  sembrar(); // estado inicial (única descarga de la ventana completa)
 
   const channel = sb
     .channel(`sesiones-cambios-${crypto.randomUUID()}`)
     .on(
       "postgres_changes",
       { event: "*", schema: "public", table: "sesiones" },
-      refetchDebounced
+      (payload) => {
+        if (cancelado) return;
+        if (payload.eventType === "DELETE") {
+          // En DELETE el payload solo trae la clave primaria (id).
+          const id = (payload.old as { id?: string } | null)?.id;
+          if (id && porId.delete(id)) emitir();
+          return;
+        }
+        // INSERT | UPDATE: la fila nueva incluye el documento completo en `data`,
+        // así que no hace falta consultar la base para conocer el cambio.
+        const row = payload.new as
+          | { dia_operativo?: string; data?: Sesion }
+          | null;
+        if (!row?.data || !row.dia_operativo) return;
+        // Ignorar cambios fuera de la ventana observada.
+        if (row.dia_operativo < corte) return;
+        porId.set(row.data.id, row.data);
+        emitir();
+      }
     )
     .subscribe();
 
   return () => {
     cancelado = true;
-    if (timer) clearTimeout(timer);
     sb.removeChannel(channel);
   };
 }
@@ -259,7 +276,7 @@ export const setLogoRemoto = (dataUrl: string | null) =>
   setConfig("logo", { dataUrl });
 
 // ===== Backups (copias de seguridad) =====
-// Cada backup es una instantánea de TODAS las sesiones + la config en un
+// Cada backup es una instantánea de las sesiones RECIENTES + la config en un
 // momento dado. Permite recuperar datos ante errores (sobre todo los
 // odómetros, continuos entre noche→mañana del día siguiente).
 //
@@ -267,6 +284,13 @@ export const setLogoRemoto = (dataUrl: string | null) =>
 // cerradas) y también de forma manual. Se conservan las copias de los últimos
 // DIAS_BACKUP días operativos; las de días más antiguos se podan.
 export const DIAS_BACKUP = 3;
+
+// Ventana de sesiones que guarda cada copia. El backup existe para recuperar
+// odómetros/turnos recientes; la historia antigua ya la resguarda el archivado
+// del servidor (pg_cron). Antes cada copia descargaba y re-subía TODA la tabla
+// caliente (hasta 365 días, ~5 MB) 3 veces al día: mucho ancho de banda y
+// almacenamiento duplicado. Con 7 días basta para el objetivo real del backup.
+export const DIAS_SESIONES_BACKUP = 7;
 
 export interface Backup {
   id: string;
@@ -340,8 +364,9 @@ export async function crearBackup(opts?: {
 }): Promise<Backup | null> {
   const sb = getSupabase();
   if (!sb) return null;
+  const corte = diaMenos(diaOperativoActual(), DIAS_SESIONES_BACKUP);
   const [sesiones, precios, trabajadores, clientes] = await Promise.all([
-    fetchTodasSesiones(),
+    fetchSesionesDesde(corte),
     getConfig<Precios>("precios"),
     getConfig<{ nombres: string[] }>("trabajadores"),
     getConfig<{ nombres: string[] }>("clientes"),
