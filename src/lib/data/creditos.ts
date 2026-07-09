@@ -301,12 +301,13 @@ export async function registrarPago(p: NuevoPago): Promise<void> {
   const sb = getSupabase();
   if (!sb) throw new Error("Sin conexión a la base de datos");
   if (!(p.monto > 0)) throw new Error("El monto debe ser mayor a 0");
+  const referencia = p.referencia?.trim() || null;
   const { error } = await sb.from("pagos_credito").insert({
     cliente_id: p.clienteId,
     fecha: Date.now(),
     monto: p.monto,
     metodo_pago: p.metodoPago ?? null,
-    referencia: p.referencia ?? null,
+    referencia,
     observacion: p.observacion ?? null,
     registrado_por_nombre: p.registradoPorNombre ?? null,
     estado: "activo",
@@ -317,7 +318,7 @@ export async function registrarPago(p: NuevoPago): Promise<void> {
     entidad: "pagos_credito",
     entidadId: p.clienteId,
     actorNombre: p.registradoPorNombre,
-    detalle: { monto: p.monto, metodo: p.metodoPago },
+    detalle: { monto: p.monto, metodo: p.metodoPago, referencia },
   });
 }
 

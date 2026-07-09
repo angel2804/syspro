@@ -196,11 +196,13 @@ export default function CreditosPage() {
             filas: filas.map((f) => ({
               fecha: f.fecha,
               cliente: nombrePorId.get(f.clienteId ?? "") ?? c.nombre,
+              galones: f.galones,
               producto: f.producto ? PRODUCTOS[f.producto] : "",
               vale: f.vale ?? "",
               precio: f.precio,
               totalCredito: f.totalCredito,
               pago: f.pago,
+              referencia: f.referencia ?? "",
               deudaPendiente: f.saldoAcumulado,
             })),
           };
@@ -615,11 +617,13 @@ function DetalleCliente({
           filas: filasFiltradas.map((f) => ({
             fecha: f.fecha,
             cliente: nombrePorId.get(f.clienteId ?? "") ?? cliente.nombre,
+            galones: f.galones,
             producto: f.producto ? PRODUCTOS[f.producto] : "",
             vale: f.vale ?? "",
             precio: f.precio,
             totalCredito: f.totalCredito,
             pago: f.pago,
+            referencia: f.referencia ?? "",
             deudaPendiente: f.saldoAcumulado,
           })),
         }),
@@ -748,6 +752,7 @@ function DetalleCliente({
                   <TableHead className="text-right">Precio</TableHead>
                   <TableHead className="text-right">Total crédito</TableHead>
                   <TableHead className="text-right">Pago</TableHead>
+                  <TableHead>Referencia</TableHead>
                   <TableHead className="text-right">Deuda pendiente</TableHead>
                 </TableRow>
               </TableHeader>
@@ -777,6 +782,7 @@ function DetalleCliente({
                     <TableCell className="text-right tabular-nums text-emerald-600">
                       {f.pago != null ? f.pago.toFixed(2) : ""}
                     </TableCell>
+                    <TableCell>{f.referencia ?? ""}</TableCell>
                     <TableCell
                       className={`text-right font-semibold tabular-nums ${
                         f.saldoAcumulado < -0.005 ? "text-red-600" : f.saldoAcumulado > 0.005 ? "text-amber-600" : ""
@@ -788,7 +794,7 @@ function DetalleCliente({
                 ))}
                 {filasFiltradas.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center text-sm text-muted-foreground">
                       Sin movimientos.
                     </TableCell>
                   </TableRow>
@@ -1217,4 +1223,3 @@ function Resumen({ label, valor, destacar }: { label: string; valor: string; des
     </div>
   );
 }
-

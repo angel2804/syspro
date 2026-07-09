@@ -8,9 +8,10 @@
 import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeft, Droplet, Save } from "lucide-react";
+import { ArrowLeft, Droplet, Fuel, Save, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -28,8 +29,14 @@ import { calcularReporteDia, diaMenos, diaOperativo, diaOperativoActual } from "
 import { useStore } from "@/lib/store";
 import {
   fetchHistorialTanques,
+  fetchCapacidadesTanques,
+  fetchRecargasTanques,
+  guardarCapacidadTanque,
   fetchUltimosRegistrosTanques,
   registrarNivelTanque,
+  registrarRecargaTanque,
+  type TanqueCapacidad,
+  type TanqueRecarga,
   type TanqueRegistro,
 } from "@/lib/data/tanques";
 
@@ -139,20 +146,42 @@ export default function InventarioTanquesPage() {
 
   const [registros, setRegistros] = useState<TanqueRegistro[]>([]);
   const [historial, setHistorial] = useState<TanqueRegistro[]>([]);
+  const [capacidades, setCapacidades] = useState<TanqueCapacidad[]>([]);
+  const [recargas, setRecargas] = useState<TanqueRecarga[]>([]);
   const [sesiones, setSesiones] = useState<Sesion[]>([]);
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
+  const [guardandoCapacidad, setGuardandoCapacidad] = useState(false);
+  const [guardandoRecarga, setGuardandoRecarga] = useState(false);
   const hoy = useMemo(() => diaOperativoActual(), []);
 
-  // Formulario de registro semanal (uno por producto).
+  // Formulario de registro semanal: solo el nivel real medido.
   const [form, setForm] = useState<
-    Record<ProductoId, { capacidad: string; nivel: string; fecha: string }>
+    Record<ProductoId, { nivel: string; fecha: string }>
   >(() => {
-    const init = {} as Record<ProductoId, { capacidad: string; nivel: string; fecha: string }>;
+    const init = {} as Record<ProductoId, { nivel: string; fecha: string }>;
     for (const p of PRODUCTO_IDS) {
-      init[p] = { capacidad: String(CAPACIDAD_DEFAULT[p]), nivel: "", fecha: hoy };
+      init[p] = { nivel: "", fecha: hoy };
     }
     return init;
+  });
+  const [capacidadForm, setCapacidadForm] = useState<Record<ProductoId, string>>(() => {
+    const init = {} as Record<ProductoId, string>;
+    for (const p of PRODUCTO_IDS) init[p] = String(CAPACIDAD_DEFAULT[p]);
+    return init;
+  });
+  const [recargaForm, setRecargaForm] = useState<{
+    producto: ProductoId;
+    galones: string;
+    fecha: string;
+    proveedor: string;
+    comprobante: string;
+  }>({
+    producto: "bio",
+    galones: "",
+    fecha: hoy,
+    proveedor: "",
+    comprobante: "",
   });
 
   const cargar = useCallback(async () => {
@@ -160,20 +189,34 @@ export default function InventarioTanquesPage() {
     try {
       const [ultimos, hist, ses] = await Promise.all([
         fetchUltimosRegistrosTanques(),
-        fetchHistorialTanques({ limite: 60 }),
+        fetchHistorialTanques({ desde: diaMenos(diaOperativoActual(), 1), limite: 60 }),
         fetchSesionesDesde(diaMenos(diaOperativoActual(), 8)),
+      ]);
+      const [caps, rec] = await Promise.all([
+        fetchCapacidadesTanques(),
+        fetchRecargasTanques({ limite: 60 }),
       ]);
       setRegistros(ultimos);
       setHistorial(hist);
+      setCapacidades(caps);
+      setRecargas(rec);
       setSesiones(ses);
       setForm((prev) => {
         const next = { ...prev };
         for (const r of ultimos) {
           next[r.producto] = {
-            capacidad: String(r.capacidadMax),
             nivel: String(r.nivelMedido),
             fecha: r.fechaMedicion,
           };
+        }
+        return next;
+      });
+      setCapacidadForm((prev) => {
+        const next = { ...prev };
+        for (const p of PRODUCTO_IDS) {
+          const cap = caps.find((c) => c.producto === p);
+          const ultimo = ultimos.find((r) => r.producto === p);
+          next[p] = String(cap?.capacidadMax ?? ultimo?.capacidadMax ?? CAPACIDAD_DEFAULT[p]);
         }
         return next;
       });
@@ -218,17 +261,37 @@ export default function InventarioTanquesPage() {
   }, [sesiones, hoy, precios]);
 
   // Nivel actual estimado = último nivel medido − lo vendido hoy (referencia).
+  const capacidadPorProducto = useMemo(() => {
+    const out: Record<ProductoId, number> = { ...CAPACIDAD_DEFAULT };
+    for (const p of PRODUCTO_IDS) {
+      const cap = capacidades.find((c) => c.producto === p);
+      const ultimo = registros.find((r) => r.producto === p);
+      out[p] = cap?.capacidadMax ?? ultimo?.capacidadMax ?? CAPACIDAD_DEFAULT[p];
+    }
+    return out;
+  }, [capacidades, registros]);
+
+  const recargasDesdeMedicion = useCallback(
+    (p: ProductoId, fechaMedicion: string) =>
+      recargas
+        .filter((r) => r.producto === p && r.fechaRecarga >= fechaMedicion)
+        .reduce((a, r) => a + r.galones, 0),
+    [recargas]
+  );
+
   const nivelActual = useCallback(
     (p: ProductoId) => {
       const r = registros.find((x) => x.producto === p);
       if (!r) return null;
-      const estimado = Math.max(0, r.nivelMedido - galonesHoy[p]);
-      return { ...r, estimado };
+      const recargado = recargasDesdeMedicion(p, r.fechaMedicion);
+      const capacidadMax = capacidadPorProducto[p];
+      const estimado = Math.max(0, Math.min(capacidadMax, r.nivelMedido + recargado - galonesHoy[p]));
+      return { ...r, capacidadMax, recargado, estimado };
     },
-    [registros, galonesHoy]
+    [registros, recargasDesdeMedicion, capacidadPorProducto, galonesHoy]
   );
 
-  const onChangeForm = (p: ProductoId, campo: "capacidad" | "nivel" | "fecha", v: string) => {
+  const onChangeForm = (p: ProductoId, campo: "nivel" | "fecha", v: string) => {
     setForm((prev) => ({ ...prev, [p]: { ...prev[p], [campo]: v } }));
   };
 
@@ -237,13 +300,11 @@ export default function InventarioTanquesPage() {
     try {
       for (const p of PRODUCTO_IDS) {
         const f = form[p];
-        const capacidad = Number(f.capacidad);
         const nivel = Number(f.nivel);
-        if (!f.fecha || !Number.isFinite(capacidad) || capacidad <= 0) continue;
+        if (!f.fecha) continue;
         if (!Number.isFinite(nivel) || nivel < 0) continue;
         await registrarNivelTanque({
           producto: p,
-          capacidadMax: capacidad,
           nivelMedido: nivel,
           fechaMedicion: f.fecha,
         });
@@ -254,6 +315,49 @@ export default function InventarioTanquesPage() {
       toast.error("No se pudo guardar: " + (e as Error).message);
     } finally {
       setGuardando(false);
+    }
+  };
+
+  const guardarCapacidades = async () => {
+    setGuardandoCapacidad(true);
+    try {
+      for (const p of PRODUCTO_IDS) {
+        const capacidad = Number(capacidadForm[p]);
+        if (!Number.isFinite(capacidad) || capacidad <= 0) {
+          throw new Error(`Capacidad invalida para ${PRODUCTOS[p]}`);
+        }
+        await guardarCapacidadTanque(p, capacidad);
+      }
+      toast.success("Capacidades guardadas");
+      await cargar();
+    } catch (e) {
+      toast.error("No se pudo guardar: " + (e as Error).message);
+    } finally {
+      setGuardandoCapacidad(false);
+    }
+  };
+
+  const guardarRecarga = async () => {
+    const galones = Number(recargaForm.galones);
+    if (!recargaForm.fecha) return toast.error("La fecha de recarga es obligatoria");
+    if (!Number.isFinite(galones) || galones <= 0) return toast.error("Galones de recarga invalidos");
+    setGuardandoRecarga(true);
+    try {
+      await registrarRecargaTanque({
+        producto: recargaForm.producto,
+        galones,
+        fechaRecarga: recargaForm.fecha,
+        proveedor: recargaForm.proveedor,
+        comprobante: recargaForm.comprobante,
+        registradoPor: "Admin",
+      });
+      toast.success("Recarga registrada");
+      setRecargaForm((prev) => ({ ...prev, galones: "", proveedor: "", comprobante: "" }));
+      await cargar();
+    } catch (e) {
+      toast.error("No se pudo registrar: " + (e as Error).message);
+    } finally {
+      setGuardandoRecarga(false);
     }
   };
 
@@ -282,7 +386,8 @@ export default function InventarioTanquesPage() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {PRODUCTO_IDS.map((p) => {
           const r = nivelActual(p);
-          const pct = r ? Math.min(100, Math.round((r.estimado / r.capacidadMax) * 100)) : null;
+          const capacidad = capacidadPorProducto[p];
+          const pct = r ? Math.min(100, Math.round((r.estimado / capacidad) * 100)) : null;
           const c = COLOR_TANQUE[p];
           return (
             <div
@@ -292,11 +397,9 @@ export default function InventarioTanquesPage() {
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <span className={`block truncate text-sm font-extrabold uppercase tracking-normal ${c.texto}`}>{PRODUCTOS[p]}</span>
-                  {r && (
-                    <span className="mt-1 block text-[11px] text-muted-foreground">
-                      Capacidad maxima {gal(r.capacidadMax)}
-                    </span>
-                  )}
+                  <span className="mt-1 block text-[11px] text-muted-foreground">
+                    Capacidad maxima {gal(capacidad)}
+                  </span>
                 </div>
                 {r && (
                   <span className={`rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${c.chip}`}>
@@ -312,7 +415,7 @@ export default function InventarioTanquesPage() {
                     <div className="mt-1 text-xs text-muted-foreground">Cantidad actual estimada</div>
                   </div>
                   <div className="mt-1 text-[11px] text-muted-foreground">
-                    Medido {gal(r.nivelMedido)} el {r.fechaMedicion} · −{gal(galonesHoy[p])} vendido hoy
+                    Medido {gal(r.nivelMedido)} el {r.fechaMedicion} · +{gal(r.recargado)} recargado · -{gal(galonesHoy[p])} vendido hoy
                   </div>
                 </>
               ) : (
@@ -337,6 +440,8 @@ export default function InventarioTanquesPage() {
           <Tabs defaultValue="registro">
             <TabsList>
               <TabsTrigger value="registro">Registro Semanal</TabsTrigger>
+              <TabsTrigger value="capacidades">Capacidades</TabsTrigger>
+              <TabsTrigger value="recargas">Recargas</TabsTrigger>
               <TabsTrigger value="historial">Historial de Registros</TabsTrigger>
             </TabsList>
 
@@ -346,7 +451,6 @@ export default function InventarioTanquesPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Producto</TableHead>
-                      <TableHead>Capacidad Máxima</TableHead>
                       <TableHead>Nivel Actual Medido (gal)</TableHead>
                       <TableHead>Fecha de Medición</TableHead>
                     </TableRow>
@@ -356,15 +460,6 @@ export default function InventarioTanquesPage() {
                       <TableRow key={p}>
                         <TableCell className={`font-medium ${COLOR_TANQUE[p].texto}`}>
                           {PRODUCTOS[p]}
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            min={1}
-                            className="w-28"
-                            value={form[p].capacidad}
-                            onChange={(e) => onChangeForm(p, "capacidad", e.target.value)}
-                          />
                         </TableCell>
                         <TableCell>
                           <Input
@@ -398,6 +493,144 @@ export default function InventarioTanquesPage() {
               </p>
             </TabsContent>
 
+            <TabsContent value="capacidades">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Capacidad maxima fija (gal)</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {PRODUCTO_IDS.map((p) => (
+                      <TableRow key={p}>
+                        <TableCell className={`font-medium ${COLOR_TANQUE[p].texto}`}>
+                          {PRODUCTOS[p]}
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            type="number"
+                            min={1}
+                            className="w-36"
+                            value={capacidadForm[p]}
+                            onChange={(e) =>
+                              setCapacidadForm((prev) => ({ ...prev, [p]: e.target.value }))
+                            }
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <Button
+                className="mt-3 w-full"
+                onClick={guardarCapacidades}
+                disabled={guardandoCapacidad}
+              >
+                <Settings className="mr-1.5 h-4 w-4" />
+                {guardandoCapacidad ? "Guardando..." : "Guardar capacidades"}
+              </Button>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Este maximo queda fijo como configuracion del tanque y se usa para calcular el porcentaje visual.
+              </p>
+            </TabsContent>
+
+            <TabsContent value="recargas">
+              <div className="grid gap-3 md:grid-cols-[160px_1fr_160px]">
+                <div>
+                  <Label>Producto</Label>
+                  <select
+                    className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                    value={recargaForm.producto}
+                    onChange={(e) =>
+                      setRecargaForm((prev) => ({ ...prev, producto: e.target.value as ProductoId }))
+                    }
+                  >
+                    {PRODUCTO_IDS.map((p) => (
+                      <option key={p} value={p}>
+                        {PRODUCTOS[p]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <Label htmlFor="recarga-galones">Galones recibidos</Label>
+                  <Input
+                    id="recarga-galones"
+                    type="number"
+                    min={0}
+                    inputMode="decimal"
+                    value={recargaForm.galones}
+                    onChange={(e) => setRecargaForm((prev) => ({ ...prev, galones: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="recarga-fecha">Fecha</Label>
+                  <Input
+                    id="recarga-fecha"
+                    type="date"
+                    value={recargaForm.fecha}
+                    onChange={(e) => setRecargaForm((prev) => ({ ...prev, fecha: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="recarga-proveedor">Proveedor</Label>
+                  <Input
+                    id="recarga-proveedor"
+                    value={recargaForm.proveedor}
+                    onChange={(e) => setRecargaForm((prev) => ({ ...prev, proveedor: e.target.value }))}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <Label htmlFor="recarga-comprobante">Comprobante / nota</Label>
+                  <Input
+                    id="recarga-comprobante"
+                    value={recargaForm.comprobante}
+                    onChange={(e) => setRecargaForm((prev) => ({ ...prev, comprobante: e.target.value }))}
+                  />
+                </div>
+              </div>
+              <Button className="mt-3 w-full" onClick={guardarRecarga} disabled={guardandoRecarga}>
+                <Fuel className="mr-1.5 h-4 w-4" />
+                {guardandoRecarga ? "Guardando..." : "Registrar recarga"}
+              </Button>
+
+              <div className="mt-4 max-h-64 overflow-x-auto overflow-y-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fecha</TableHead>
+                      <TableHead>Producto</TableHead>
+                      <TableHead>Galones</TableHead>
+                      <TableHead>Proveedor</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {recargas.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+                          Sin recargas.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      recargas.map((r) => (
+                        <TableRow key={r.id}>
+                          <TableCell className="whitespace-nowrap text-xs">{r.fechaRecarga}</TableCell>
+                          <TableCell className={COLOR_TANQUE[r.producto].texto}>
+                            {PRODUCTOS[r.producto]}
+                          </TableCell>
+                          <TableCell>{gal(r.galones)}</TableCell>
+                          <TableCell>{r.proveedor || r.comprobante || "-"}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </TabsContent>
+
             <TabsContent value="historial">
               <div className="max-h-96 overflow-x-auto overflow-y-auto">
                 <Table>
@@ -406,7 +639,7 @@ export default function InventarioTanquesPage() {
                       <TableHead>Fecha</TableHead>
                       <TableHead>Producto</TableHead>
                       <TableHead>Nivel medido</TableHead>
-                      <TableHead>Capacidad</TableHead>
+                      <TableHead>Capacidad vigente</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -430,7 +663,7 @@ export default function InventarioTanquesPage() {
                             {PRODUCTOS[r.producto]}
                           </TableCell>
                           <TableCell>{gal(r.nivelMedido)}</TableCell>
-                          <TableCell>{gal(r.capacidadMax)}</TableCell>
+                          <TableCell>{gal(capacidadPorProducto[r.producto])}</TableCell>
                         </TableRow>
                       ))
                     )}

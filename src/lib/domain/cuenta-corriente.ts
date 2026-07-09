@@ -93,6 +93,7 @@ export interface FilaEstadoCuenta {
   totalCredito?: number;
   // Columna de pago (vacía en filas de crédito):
   pago?: number;
+  referencia?: string;
   // Saldo acumulado FIRMADO: negativo = deuda, positivo = saldo a favor.
   // Se muestra tal cual en la columna "Deuda pendiente" (p. ej. -192.00).
   saldoAcumulado: number;
@@ -206,6 +207,7 @@ export function construirEstadoCuenta(
         clienteId: m.mov.clienteId,
         fecha: m.mov.fecha,
         pago: m.mov.monto,
+        ...(m.mov.referencia ? { referencia: m.mov.referencia } : {}),
         saldoAcumulado: saldo,
       });
     }
@@ -250,7 +252,7 @@ export function construirCSVEstadoCuenta(
   rows.push(["Total pagos", resumen.totalPagos.toFixed(2)]);
   rows.push(["Deuda pendiente", formatoSaldo(-resumen.deudaPendiente)]);
   rows.push([]);
-  rows.push(["Fecha", "Galones", "Producto", "Vale", "Precio", "Total crédito", "Pago", "Deuda pendiente"]);
+  rows.push(["Fecha", "Galones", "Producto", "Vale", "Precio", "Total crédito", "Pago", "Referencia", "Deuda pendiente"]);
   for (const f of filas) {
     rows.push([
       fechaCorta(f.fecha),
@@ -260,6 +262,7 @@ export function construirCSVEstadoCuenta(
       f.precio != null ? f.precio.toFixed(2) : "",
       f.totalCredito != null ? f.totalCredito.toFixed(2) : "",
       f.pago != null ? f.pago.toFixed(2) : "",
+      f.referencia ?? "",
       formatoSaldo(f.saldoAcumulado),
     ]);
   }

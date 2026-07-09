@@ -15,6 +15,23 @@ export interface TanqueRegistro {
   createdAt: number;
 }
 
+export interface TanqueCapacidad {
+  producto: ProductoId;
+  capacidadMax: number;
+  updatedAt: number;
+}
+
+export interface TanqueRecarga {
+  id: string;
+  producto: ProductoId;
+  galones: number;
+  fechaRecarga: string; // YYYY-MM-DD
+  proveedor: string | null;
+  comprobante: string | null;
+  registradoPor: string | null;
+  createdAt: number;
+}
+
 interface FilaTanqueRegistro {
   id: string;
   producto: string;
@@ -22,6 +39,23 @@ interface FilaTanqueRegistro {
   nivel_medido: number;
   fecha_medicion: string;
   medido_por: string | null;
+  created_at: number;
+}
+
+interface FilaTanqueCapacidad {
+  producto: string;
+  capacidad_max: number;
+  updated_at: number;
+}
+
+interface FilaTanqueRecarga {
+  id: string;
+  producto: string;
+  galones: number;
+  fecha_recarga: string;
+  proveedor: string | null;
+  comprobante: string | null;
+  registrado_por: string | null;
   created_at: number;
 }
 
@@ -37,9 +71,29 @@ function registroDeFila(r: FilaTanqueRegistro): TanqueRegistro {
   };
 }
 
+function capacidadDeFila(r: FilaTanqueCapacidad): TanqueCapacidad {
+  return {
+    producto: r.producto as ProductoId,
+    capacidadMax: Number(r.capacidad_max),
+    updatedAt: Number(r.updated_at),
+  };
+}
+
+function recargaDeFila(r: FilaTanqueRecarga): TanqueRecarga {
+  return {
+    id: r.id,
+    producto: r.producto as ProductoId,
+    galones: Number(r.galones),
+    fechaRecarga: r.fecha_recarga,
+    proveedor: r.proveedor ?? null,
+    comprobante: r.comprobante ?? null,
+    registradoPor: r.registrado_por ?? null,
+    createdAt: Number(r.created_at),
+  };
+}
+
 export interface NuevoRegistroTanque {
   producto: ProductoId;
-  capacidadMax: number;
   nivelMedido: number;
   fechaMedicion: string;
   medidoPor?: string;
@@ -52,7 +106,7 @@ export async function registrarNivelTanque(r: NuevoRegistroTanque): Promise<void
   if (!sb) return;
   const { error } = await sb.from("tanque_registros").insert({
     producto: r.producto,
-    capacidad_max: r.capacidadMax,
+    capacidad_max: 1,
     nivel_medido: r.nivelMedido,
     fecha_medicion: r.fechaMedicion,
     medido_por: r.medidoPor?.trim() || null,
@@ -80,6 +134,7 @@ export async function fetchUltimosRegistrosTanques(): Promise<TanqueRegistro[]> 
 // Historial completo (más reciente primero), opcionalmente filtrado.
 export async function fetchHistorialTanques(opts: {
   producto?: ProductoId;
+  desde?: string;
   limite?: number;
 } = {}): Promise<TanqueRegistro[]> {
   const sb = getSupabase();
@@ -90,7 +145,80 @@ export async function fetchHistorialTanques(opts: {
     .order("created_at", { ascending: false })
     .limit(opts.limite ?? 100);
   if (opts.producto) q = q.eq("producto", opts.producto);
+  if (opts.desde) q = q.gte("fecha_medicion", opts.desde);
   const { data, error } = await q;
   if (error) throw error;
   return (data ?? []).map((r) => registroDeFila(r as FilaTanqueRegistro));
+}
+
+export async function fetchCapacidadesTanques(): Promise<TanqueCapacidad[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const { data, error } = await sb
+    .from("tanque_capacidades")
+    .select("producto, capacidad_max, updated_at");
+  if (error) throw error;
+  return (data ?? []).map((r) => capacidadDeFila(r as FilaTanqueCapacidad));
+}
+
+export async function guardarCapacidadTanque(
+  producto: ProductoId,
+  capacidadMax: number
+): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  if (!(capacidadMax > 0)) throw new Error("La capacidad maxima debe ser mayor a 0");
+  const { error } = await sb.from("tanque_capacidades").upsert(
+    {
+      producto,
+      capacidad_max: capacidadMax,
+      updated_at: Date.now(),
+    },
+    { onConflict: "producto" }
+  );
+  if (error) throw error;
+}
+
+export interface NuevaRecargaTanque {
+  producto: ProductoId;
+  galones: number;
+  fechaRecarga: string;
+  proveedor?: string;
+  comprobante?: string;
+  registradoPor?: string;
+}
+
+export async function registrarRecargaTanque(r: NuevaRecargaTanque): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) return;
+  if (!(r.galones > 0)) throw new Error("Los galones de recarga deben ser mayores a 0");
+  const { error } = await sb.from("tanque_recargas").insert({
+    producto: r.producto,
+    galones: r.galones,
+    fecha_recarga: r.fechaRecarga,
+    proveedor: r.proveedor?.trim() || null,
+    comprobante: r.comprobante?.trim() || null,
+    registrado_por: r.registradoPor?.trim() || null,
+  });
+  if (error) throw error;
+}
+
+export async function fetchRecargasTanques(opts: {
+  producto?: ProductoId;
+  desde?: string;
+  limite?: number;
+} = {}): Promise<TanqueRecarga[]> {
+  const sb = getSupabase();
+  if (!sb) return [];
+  let q = sb
+    .from("tanque_recargas")
+    .select("id, producto, galones, fecha_recarga, proveedor, comprobante, registrado_por, created_at")
+    .order("fecha_recarga", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(opts.limite ?? 100);
+  if (opts.producto) q = q.eq("producto", opts.producto);
+  if (opts.desde) q = q.gte("fecha_recarga", opts.desde);
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []).map((r) => recargaDeFila(r as FilaTanqueRecarga));
 }

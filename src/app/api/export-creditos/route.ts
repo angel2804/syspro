@@ -8,11 +8,13 @@ type FormatoExport = "xlsx" | "pdf";
 interface FilaCreditoExport {
   fecha: number;
   cliente: string;
+  galones?: number;
   producto?: string;
   vale?: string;
   precio?: number;
   totalCredito?: number;
   pago?: number;
+  referencia?: string;
   deudaPendiente: number;
 }
 
@@ -49,6 +51,11 @@ const TEMPLATE_PATH = () =>
 
 const soles = (n: number) => `S/ ${(n || 0).toFixed(2)}`;
 const fechaNombre = () => new Date().toISOString().slice(0, 10);
+const galonesFmt = (n: number) =>
+  n.toLocaleString("es-PE", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
+  });
 
 // Normaliza el cuerpo a una lista de secciones (unifica ambos modos).
 function seccionesDe(data: ExportCreditosBody): SeccionCliente[] {
@@ -124,7 +131,7 @@ function anchoTexto(s: string, size: number) {
 }
 
 interface ColDef {
-  key: keyof FilaCreditoExport | "fecha";
+  key: keyof FilaCreditoExport;
   titulo: string;
   x: number; // borde izquierdo
   w: number;
@@ -133,13 +140,15 @@ interface ColDef {
 
 // Columnas de la tabla (x en puntos desde el borde izquierdo de la página).
 const COLS: ColDef[] = [
-  { key: "fecha", titulo: "FECHA", x: 40, w: 62, align: "left" },
-  { key: "producto", titulo: "PRODUCTO", x: 102, w: 78, align: "left" },
-  { key: "vale", titulo: "VALE", x: 180, w: 70, align: "left" },
-  { key: "precio", titulo: "PRECIO", x: 250, w: 70, align: "right" },
-  { key: "totalCredito", titulo: "TOTAL CRÉDITO", x: 320, w: 90, align: "right" },
-  { key: "pago", titulo: "PAGOS", x: 410, w: 60, align: "right" },
-  { key: "deudaPendiente", titulo: "DEUDA", x: 470, w: 85, align: "right" },
+  { key: "fecha", titulo: "FECHA", x: 40, w: 52, align: "left" },
+  { key: "producto", titulo: "PRODUCTO", x: 92, w: 60, align: "left" },
+  { key: "vale", titulo: "VALE", x: 152, w: 48, align: "left" },
+  { key: "galones", titulo: "GAL", x: 200, w: 42, align: "right" },
+  { key: "precio", titulo: "PRECIO", x: 242, w: 50, align: "right" },
+  { key: "totalCredito", titulo: "TOTAL", x: 292, w: 62, align: "right" },
+  { key: "pago", titulo: "PAGOS", x: 354, w: 54, align: "right" },
+  { key: "deudaPendiente", titulo: "DEUDA", x: 408, w: 62, align: "right" },
+  { key: "referencia", titulo: "REF", x: 470, w: 85, align: "left" },
 ];
 const TABLA_X = MARGIN;
 const TABLA_W = PAGE_W - MARGIN * 2;
@@ -266,6 +275,8 @@ function celdaTexto(f: FilaCreditoExport, c: ColDef): string {
       return fechaLocal(f.fecha);
     case "producto":
       return f.producto ?? "";
+    case "galones":
+      return f.galones != null ? galonesFmt(f.galones) : "";
     case "vale":
       return f.vale ?? "";
     case "precio":
@@ -274,6 +285,8 @@ function celdaTexto(f: FilaCreditoExport, c: ColDef): string {
       return f.totalCredito != null ? f.totalCredito.toFixed(2) : "";
     case "pago":
       return f.pago != null ? f.pago.toFixed(2) : "";
+    case "referencia":
+      return f.referencia ?? "";
     case "deudaPendiente":
       return f.deudaPendiente.toFixed(2);
     default:
@@ -426,8 +439,6 @@ function generarPDF(secciones: SeccionCliente[], empresa: string): Buffer {
 // Excel
 // ===========================================================================
 
-// Estilo de cabecera capturado de la plantilla (para que las hojas nuevas del
-// export "todos" luzcan igual que la plantilla original).
 interface EstiloCabecera {
   fill?: ExcelJS.Fill;
   font?: Partial<ExcelJS.Font>;
@@ -440,13 +451,15 @@ async function cargarPlantilla(): Promise<{ wb: ExcelJS.Workbook; estilo: Estilo
   await wb.xlsx.readFile(TEMPLATE_PATH());
   const ws = wb.worksheets[0];
   const hdr = ws.getRow(2).getCell(2);
-  const estilo: EstiloCabecera = {
-    fill: hdr.fill as ExcelJS.Fill,
-    font: hdr.font as Partial<ExcelJS.Font>,
-    border: hdr.border as Partial<ExcelJS.Borders>,
-    anchos: ws.columns.map((c) => c.width),
+  return {
+    wb,
+    estilo: {
+      fill: hdr.fill as ExcelJS.Fill,
+      font: hdr.font as Partial<ExcelJS.Font>,
+      border: hdr.border as Partial<ExcelJS.Borders>,
+      anchos: ws.columns.map((c) => c.width),
+    },
   };
-  return { wb, estilo };
 }
 
 // Export de UN cliente: usa la plantilla tal cual (comportamiento original).
@@ -473,41 +486,72 @@ function nombreHojaUnico(nombre: string, usados: Set<string>): string {
   return n;
 }
 
+function copiarHojaPlantilla(
+  destino: ExcelJS.Workbook,
+  plantilla: ExcelJS.Worksheet,
+  nombre: string
+) {
+  const merges: string[] = [...(plantilla.model.merges ?? [])];
+  const model = JSON.parse(JSON.stringify(plantilla.model));
+  model.name = nombre;
+  const ws = destino.addWorksheet(nombre);
+  ws.model = model;
+  for (const rng of merges) {
+    try {
+      ws.mergeCells(rng);
+    } catch {
+      /* ya combinado */
+    }
+  }
+  return ws;
+}
+
 // Escribe la tabla de un cliente en una hoja a partir de `startRow` (fila de la
 // primera fila de datos; se asume que la cabecera está en startRow-1).
 function llenarHojaCliente(ws: ExcelJS.Worksheet, sec: SeccionCliente, startRow: number) {
+  const cabeceras = ["FECHA", "CLIENTE", "PRODUCTO", "VALE", "GALONES", "PRECIO", "TOTAL CREDITO", "PAGOS", "DEUDA PENDIENTE", "REFERENCIA"];
+  const headerRow = ws.getRow(startRow - 1);
+  cabeceras.forEach((txt, i) => {
+    headerRow.getCell(i + 2).value = txt;
+  });
+  headerRow.commit();
+
   sec.filas.forEach((f, i) => {
     const row = ws.getRow(startRow + i);
     row.getCell(2).value = new Date(f.fecha);
     row.getCell(3).value = f.cliente ?? sec.cliente;
     row.getCell(4).value = f.producto ?? "";
     row.getCell(5).value = f.vale ?? "";
-    row.getCell(6).value = f.precio ?? null;
-    row.getCell(7).value = f.totalCredito ?? null;
-    row.getCell(8).value = f.pago ?? null;
-    row.getCell(9).value = f.deudaPendiente;
+    row.getCell(6).value = f.galones ?? null;
+    row.getCell(7).value = f.precio ?? null;
+    row.getCell(8).value = f.totalCredito ?? null;
+    row.getCell(9).value = f.pago ?? null;
+    row.getCell(10).value = f.deudaPendiente;
+    row.getCell(11).value = f.referencia ?? "";
     row.getCell(2).numFmt = "dd/mm/yyyy";
-    for (const col of [6, 7, 8, 9]) row.getCell(col).numFmt = "#,##0.00";
+    row.getCell(6).numFmt = "#,##0.###";
+    for (const col of [7, 8, 9, 10]) row.getCell(col).numFmt = "#,##0.00";
     row.commit();
   });
   const totalRow = ws.getRow(startRow + sec.filas.length + 1);
-  totalRow.getCell(6).value = "TOTAL";
-  totalRow.getCell(7).value = sec.resumen.totalCreditos;
-  totalRow.getCell(8).value = sec.resumen.totalPagos;
-  totalRow.getCell(9).value = -sec.resumen.deudaPendiente;
-  for (const col of [7, 8, 9]) totalRow.getCell(col).numFmt = "#,##0.00";
+  totalRow.getCell(7).value = "TOTAL";
+  totalRow.getCell(8).value = sec.resumen.totalCreditos;
+  totalRow.getCell(9).value = sec.resumen.totalPagos;
+  totalRow.getCell(10).value = -sec.resumen.deudaPendiente;
+  for (const col of [8, 9, 10]) totalRow.getCell(col).numFmt = "#,##0.00";
   totalRow.font = { bold: true };
   totalRow.commit();
 }
 
 // Export de TODOS los clientes: una hoja por cliente, con el nombre del cliente
 // como nombre de pestaña, replicando el estilo de la plantilla.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function generarExcelTodos(secciones: SeccionCliente[], empresa: string) {
   const { estilo } = await cargarPlantilla();
   const out = new ExcelJS.Workbook();
   out.creator = empresa;
   const usados = new Set<string>();
-  const CABECERAS = ["FECHA", "CLIENTE", "PRODUCTO", "VALE", "PRECIO", "TOTAL CREDITO", "PAGOS", "DEUDA PENDIENTE"];
+  const CABECERAS = ["FECHA", "CLIENTE", "PRODUCTO", "GALONES", "VALE", "PRECIO", "TOTAL CREDITO", "PAGOS", "DEUDA PENDIENTE"];
 
   for (const sec of secciones) {
     const ws = out.addWorksheet(nombreHojaUnico(sec.cliente, usados), {
@@ -518,7 +562,7 @@ async function generarExcelTodos(secciones: SeccionCliente[], empresa: string) {
       if (w) ws.getColumn(idx + 1).width = w;
     });
     // Fila 1: título con el cliente.
-    ws.mergeCells(1, 2, 1, 9);
+    ws.mergeCells(1, 2, 1, 10);
     const titulo = ws.getCell(1, 2);
     titulo.value = `Estado de cuenta — ${sec.cliente}`;
     titulo.font = { bold: true, size: 13 };
@@ -533,6 +577,22 @@ async function generarExcelTodos(secciones: SeccionCliente[], empresa: string) {
     });
     hdr.commit();
     // Datos desde la fila 3.
+    llenarHojaCliente(ws, sec, 3);
+  }
+  return out.xlsx.writeBuffer();
+}
+
+async function generarExcelTodosConPlantilla(secciones: SeccionCliente[], empresa: string) {
+  const plantillaWb = new ExcelJS.Workbook();
+  await plantillaWb.xlsx.readFile(TEMPLATE_PATH());
+  const plantilla = plantillaWb.worksheets[0];
+  if (!plantilla) throw new Error("La plantilla de crÃ©ditos no tiene hojas.");
+
+  const out = new ExcelJS.Workbook();
+  out.creator = empresa;
+  const usados = new Set<string>();
+  for (const sec of secciones) {
+    const ws = copiarHojaPlantilla(out, plantilla, nombreHojaUnico(sec.cliente, usados));
     llenarHojaCliente(ws, sec, 3);
   }
   return out.xlsx.writeBuffer();
@@ -564,7 +624,7 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = esTodos
-      ? await generarExcelTodos(secciones, empresa)
+      ? await generarExcelTodosConPlantilla(secciones, empresa)
       : await generarExcelUnCliente(secciones[0]);
     return new Response(new Uint8Array(buffer), {
       headers: {
