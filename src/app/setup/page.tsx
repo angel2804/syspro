@@ -23,21 +23,27 @@ import {
 import type { TurnoId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { Fuel, Lock, LogOut, CheckCircle2 } from "lucide-react";
+import { Fuel, Lock, LogOut, CheckCircle2, Users, ChevronRight } from "lucide-react";
 
 export default function SetupPage() {
   const router = useRouter();
   const auth = useStore((s) => s.auth);
   const sesiones = useStore((s) => s.sesiones);
   const syncEstado = useStore((s) => s.sync.estado);
+  const trabajadores = useStore((s) => s.trabajadores);
   const iniciarSesion = useStore((s) => s.iniciarSesion);
   const setCurrentSesion = useStore((s) => s.setCurrentSesion);
+  const setAuth = useStore((s) => s.setAuth);
   const mergeRemoteSesiones = useStore((s) => s.mergeRemoteSesiones);
   const logout = useStore((s) => s.logout);
 
   const [sel, setSel] = useState<{ islaId: string; turno: TurnoId } | null>(null);
   const hydrated = useHydrated();
   const [verificando, setVerificando] = useState(false);
+  // Cambio rápido de trabajador (relevo de turno): abre el selector de nombres
+  // reutilizando la MISMA cuenta compartida de Supabase, sin cerrar sesión ni
+  // pedir contraseña de nuevo.
+  const [cambiandoTrabajador, setCambiandoTrabajador] = useState(false);
   // Cuadro de confirmación: el trabajador debe re-confirmar en qué isla está
   // físicamente antes de arrancar, para no repetir el error de elegir mal.
   const [confirmandoIsla, setConfirmandoIsla] = useState(false);
@@ -141,6 +147,25 @@ export default function SetupPage() {
     }
   }
 
+  // Relevo de turno: cambia el nombre operativo del trabajador SIN cerrar la
+  // sesión de Supabase (todos comparten la misma cuenta común, con permisos
+  // idénticos, así que esto no es escalación de privilegios). El siguiente
+  // trabajador solo toca su nombre y ya está adentro. Si ese trabajador tiene
+  // un turno activo, el efecto de arriba lo lleva directo al panel.
+  function cambiarTrabajador(nombre: string) {
+    if (!auth) return;
+    setSel(null);
+    setCambiandoTrabajador(false);
+    setCurrentSesion(null);
+    setAuth({
+      rol: "trabajador",
+      trabajador: nombre,
+      nombre,
+      permisos: [],
+      userId: auth.userId,
+    });
+  }
+
   // El trabajador confirma en qué isla está físicamente. Si coincide con la que
   // eligió, arranca; si no, se le avisa y vuelve a la selección de isla.
   function confirmarIsla(islaId: string) {
@@ -176,17 +201,28 @@ export default function SetupPage() {
               </p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            className="text-slate-300 hover:bg-white/10 hover:text-white"
-            onClick={async () => {
-              await logoutSupabase();
-              logout();
-              router.replace("/");
-            }}
-          >
-            <LogOut className="mr-1 h-4 w-4" /> Salir
-          </Button>
+          <div className="flex items-center gap-2">
+            {!esAdmin && (
+              <Button
+                variant="ghost"
+                className="text-amber-200 hover:bg-amber-400/10 hover:text-amber-100"
+                onClick={() => setCambiandoTrabajador(true)}
+              >
+                <Users className="mr-1 h-4 w-4" /> Cambiar de trabajador
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              className="text-slate-300 hover:bg-white/10 hover:text-white"
+              onClick={async () => {
+                await logoutSupabase();
+                logout();
+                router.replace("/");
+              }}
+            >
+              <LogOut className="mr-1 h-4 w-4" /> Salir
+            </Button>
+          </div>
         </div>
 
         {/* Trabajador que ya hizo su turno hoy: no puede tomar otro */}
@@ -209,6 +245,15 @@ export default function SetupPage() {
             <p className="mt-1 text-sm text-slate-400">
               Cada trabajador puede registrar un solo turno por día. Vuelve mañana.
             </p>
+            <div className="mt-5">
+              <p className="mb-2 text-xs text-slate-400">¿Empieza otro trabajador?</p>
+              <Button
+                onClick={() => setCambiandoTrabajador(true)}
+                className="h-11 bg-gradient-to-r from-amber-500 to-orange-600 px-6 font-bold text-white hover:from-amber-400 hover:to-orange-500"
+              >
+                <Users className="mr-1.5 h-5 w-5" /> Cambiar de trabajador
+              </Button>
+            </div>
           </div>
         ) : (
         /* Matriz isla x turno */
@@ -295,6 +340,51 @@ export default function SetupPage() {
           </div>
         )}
       </div>
+
+      {/* Relevo de turno: elegir el siguiente trabajador sin cerrar sesión */}
+      <Dialog open={cambiandoTrabajador} onOpenChange={setCambiandoTrabajador}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>¿Quién empieza el turno?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Selecciona el nombre del trabajador que va a empezar. No hace falta
+            cerrar sesión ni volver a poner la contraseña.
+          </p>
+          <div className="mt-1 grid gap-2">
+            {trabajadores.map((nombre) => {
+              const activa =
+                hydrated && sesiones.find((s) => s.trabajador === nombre && !s.cerrada);
+              const esActual = auth?.rol === "trabajador" && auth.trabajador === nombre;
+              return (
+                <button
+                  key={nombre}
+                  onClick={() => cambiarTrabajador(nombre)}
+                  className="group flex items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-accent"
+                >
+                  <span className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-red-600 font-bold text-white">
+                      {nombre[0]}
+                    </span>
+                    <span className="font-medium">{nombre}</span>
+                  </span>
+                  {esActual ? (
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                      Actual
+                    </span>
+                  ) : activa ? (
+                    <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-semibold text-amber-600 dark:text-amber-300">
+                      Turno activo
+                    </span>
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmación de isla: el trabajador re-confirma dónde está físicamente */}
       <Dialog open={confirmandoIsla} onOpenChange={setConfirmandoIsla}>
