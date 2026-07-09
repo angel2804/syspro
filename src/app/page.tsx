@@ -252,7 +252,7 @@ export default function LoginPage() {
   }
 
   const logoNode = (
-    <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-[inherit] bg-gradient-to-br from-amber-400 via-orange-500 to-red-600">
+    <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-[inherit] bg-gradient-to-br from-amber-400 via-emerald-600 to-green-700">
       {logo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={logo} alt="Logo" className="h-full w-full object-contain" />
@@ -297,7 +297,7 @@ export default function LoginPage() {
                 </div>
                 <div className="leading-tight">
                   <p className="text-lg font-bold tracking-tight">
-                    <span className="dl-text-gradient">GrifoSys</span>
+                    <span className="dl-text-gradient">Tanko</span>
                   </p>
                   <p className="text-[10px] font-medium uppercase tracking-[0.25em] text-amber-200/60">
                     Operativo
@@ -401,7 +401,7 @@ export default function LoginPage() {
                   {logoNode}
                 </div>
                 <h1 className="dl-text-gradient text-2xl font-extrabold tracking-tight">
-                  GrifoSys
+                  Tanko
                 </h1>
               </div>
 
@@ -410,7 +410,7 @@ export default function LoginPage() {
                   Bienvenido
                 </p>
                 <h2 className="mt-1 text-3xl font-semibold tracking-tight">
-                  GrifoSys <span className="text-amber-300">Operativo</span>
+                  Tanko <span className="text-amber-300">Operativo</span>
                 </h2>
                 <p className="mt-2 text-sm text-amber-50/50">
                   Selecciona cómo deseas ingresar al sistema.
@@ -448,20 +448,20 @@ export default function LoginPage() {
                         // pide la contraseña otra vez: directo a elegir nombre.
                         if (sesionTrabActiva) setTrabListo(true);
                       }}
-                      className="gs-ripple-host animate-slide-in-right group flex items-center gap-4 rounded-xl border border-orange-400/10 bg-white/[0.03] p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-400/40 hover:bg-orange-400/[0.07] hover:shadow-[0_12px_40px_-16px_rgba(249,115,22,0.45)] active:scale-[0.98]"
+                      className="gs-ripple-host animate-slide-in-right group flex items-center gap-4 rounded-xl border border-emerald-500/10 bg-white/[0.03] p-4 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-500/40 hover:bg-emerald-500/[0.07] hover:shadow-[0_12px_40px_-16px_rgba(249,115,22,0.45)] active:scale-[0.98]"
                     >
-                      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-orange-500/15 text-orange-200 transition-all duration-200 group-hover:scale-105 group-hover:bg-orange-500/25">
+                      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-emerald-600/15 text-emerald-300 transition-all duration-200 group-hover:scale-105 group-hover:bg-emerald-600/25">
                         <User className="h-7 w-7" />
                       </span>
                       <span className="flex-1">
                         <span className="block font-semibold text-white">
                           Trabajador
                         </span>
-                        <span className="block text-xs text-orange-50/50">
+                        <span className="block text-xs text-emerald-50/50">
                           Selecciona tu nombre
                         </span>
                       </span>
-                      <ChevronRight className="h-5 w-5 text-orange-200/40 transition-all duration-200 group-hover:translate-x-1 group-hover:text-orange-200" />
+                      <ChevronRight className="h-5 w-5 text-emerald-300/40 transition-all duration-200 group-hover:translate-x-1 group-hover:text-emerald-300" />
                     </button>
                   </div>
                 )}
@@ -531,7 +531,7 @@ export default function LoginPage() {
                     <Button
                       onPointerDown={ripple}
                       disabled={cargando}
-                      className="gs-ripple-host h-11 w-full bg-gradient-to-r from-amber-500 to-orange-600 font-semibold text-white transition-all duration-200 hover:from-amber-400 hover:to-orange-500 hover:shadow-[0_12px_40px_-12px_rgba(245,158,11,0.6)] active:scale-[0.98]"
+                      className="gs-ripple-host h-11 w-full bg-gradient-to-r from-amber-500 to-green-700 font-semibold text-white transition-all duration-200 hover:from-amber-400 hover:to-emerald-600 hover:shadow-[0_12px_40px_-12px_rgba(245,158,11,0.6)] active:scale-[0.98]"
                       onClick={entrarAdmin}
                     >
                       {cargando ? "Entrando…" : "Entrar"}
@@ -552,11 +552,11 @@ export default function LoginPage() {
                       }}
                     />
                     <div className="space-y-2">
-                      <label htmlFor="trab-email" className="text-sm font-medium text-orange-50/80">
+                      <label htmlFor="trab-email" className="text-sm font-medium text-emerald-50/80">
                         Correo de trabajador
                       </label>
                       <div className="relative">
-                        <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-orange-200/50" />
+                        <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-300/50" />
                         <Input
                           id="trab-email"
                           type="email"
@@ -566,16 +566,16 @@ export default function LoginPage() {
                           onChange={(e) => setTemail(e.target.value)}
                           onKeyDown={(e) => e.key === "Enter" && entrarCuentaTrabajador()}
                           placeholder="trabajador@grifo.local"
-                          className="border-orange-400/15 bg-white/[0.04] pl-9 text-white placeholder:text-orange-50/30 focus-visible:border-orange-400/50 focus-visible:ring-orange-400/30"
+                          className="border-emerald-500/15 bg-white/[0.04] pl-9 text-white placeholder:text-emerald-50/30 focus-visible:border-emerald-500/50 focus-visible:ring-emerald-500/30"
                         />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <label htmlFor="trab-pass" className="text-sm font-medium text-orange-50/80">
+                      <label htmlFor="trab-pass" className="text-sm font-medium text-emerald-50/80">
                         Contraseña
                       </label>
                       <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-orange-200/50" />
+                        <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-300/50" />
                         <Input
                           id="trab-pass"
                           type="password"
@@ -584,14 +584,14 @@ export default function LoginPage() {
                           onChange={(e) => setTpass(e.target.value)}
                           onKeyDown={(e) => e.key === "Enter" && entrarCuentaTrabajador()}
                           placeholder="••••••••"
-                          className="border-orange-400/15 bg-white/[0.04] pl-9 text-white placeholder:text-orange-50/30 focus-visible:border-orange-400/50 focus-visible:ring-orange-400/30"
+                          className="border-emerald-500/15 bg-white/[0.04] pl-9 text-white placeholder:text-emerald-50/30 focus-visible:border-emerald-500/50 focus-visible:ring-emerald-500/30"
                         />
                       </div>
                     </div>
-                    <label className="flex cursor-pointer items-start gap-2 text-xs text-orange-50/55">
+                    <label className="flex cursor-pointer items-start gap-2 text-xs text-emerald-50/55">
                       <input
                         type="checkbox"
-                        className="mt-0.5 size-4 accent-orange-500"
+                        className="mt-0.5 size-4 accent-emerald-600"
                         checked={recordarTrabajador}
                         onChange={(e) => {
                           setRecordarTrabajador(e.target.checked);
@@ -600,7 +600,7 @@ export default function LoginPage() {
                       />
                       <span>
                         Recordar cuenta de trabajador en esta PC
-                        <span className="block text-orange-50/40">
+                        <span className="block text-emerald-50/40">
                           Así solo presionan Continuar y luego eligen su nombre.
                         </span>
                       </span>
@@ -608,12 +608,12 @@ export default function LoginPage() {
                     <Button
                       onPointerDown={ripple}
                       disabled={cargando}
-                      className="gs-ripple-host h-11 w-full bg-gradient-to-r from-orange-500 to-red-600 font-semibold text-white transition-all duration-200 hover:from-orange-400 hover:to-red-500 active:scale-[0.98]"
+                      className="gs-ripple-host h-11 w-full bg-gradient-to-r from-emerald-600 to-green-700 font-semibold text-white transition-all duration-200 hover:from-emerald-500 hover:to-green-600 active:scale-[0.98]"
                       onClick={entrarCuentaTrabajador}
                     >
                       {cargando ? "Verificando…" : "Continuar"}
                     </Button>
-                    <p className="text-center text-[11px] text-orange-50/40">
+                    <p className="text-center text-[11px] text-emerald-50/40">
                       Cuenta común del grifo · luego eliges tu nombre
                     </p>
                   </div>
@@ -652,10 +652,10 @@ export default function LoginPage() {
                             onPointerDown={ripple}
                             onClick={() => elegirTrabajador(nombre)}
                             style={{ animationDelay: `${i * 60}ms` }}
-                            className="gs-ripple-host group flex animate-in fade-in items-center justify-between gap-3 rounded-xl border border-orange-400/10 bg-white/[0.03] p-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-orange-400/40 hover:bg-orange-400/[0.07] active:scale-[0.98]"
+                            className="gs-ripple-host group flex animate-in fade-in items-center justify-between gap-3 rounded-xl border border-emerald-500/10 bg-white/[0.03] p-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-500/40 hover:bg-emerald-500/[0.07] active:scale-[0.98]"
                           >
                             <span className="flex items-center gap-3">
-                              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-red-600 font-bold text-white">
+                              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-emerald-600 to-green-700 font-bold text-white">
                                 {nombre[0]}
                               </span>
                               <span className="font-medium text-white">
@@ -667,7 +667,7 @@ export default function LoginPage() {
                                 Turno activo
                               </span>
                             ) : (
-                              <ChevronRight className="h-4 w-4 text-orange-200/40 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-orange-200" />
+                              <ChevronRight className="h-4 w-4 text-emerald-300/40 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-emerald-300" />
                             )}
                           </button>
                         );
@@ -679,7 +679,7 @@ export default function LoginPage() {
               </div>
 
               <p className="mt-6 text-center text-xs text-amber-50/35">
-                {hoy()} · GrifoSys · Sistema de estación de servicios
+                {hoy()} · Tanko · Sistema de estación de servicios
               </p>
             </div>
           </main>
@@ -725,12 +725,12 @@ function EstacionIlustracion() {
       <rect x="166" y="172" width="40" height="28" rx="2" fill="#f59e0b" fillOpacity="0.12" />
       <rect x="216" y="172" width="40" height="28" rx="2" fill="#f59e0b" fillOpacity="0.12" />
       <rect x="266" y="172" width="22" height="28" rx="2" fill="#f59e0b" fillOpacity="0.12" />
-      <text x="225" y="142" textAnchor="middle" fontSize="11" fontWeight="700" fill="#fbbf24" opacity="0.85">GrifoSys</text>
+      <text x="225" y="142" textAnchor="middle" fontSize="11" fontWeight="700" fill="#fbbf24" opacity="0.85">Tanko</text>
 
       {/* Marquesina (canopy) con borde neón */}
       <polygon points="36,96 360,96 392,120 68,120" fill="#24150a" stroke="url(#dl-neon)" strokeWidth="2" />
       <polygon points="36,96 360,96 392,120 68,120" fill="none" stroke="#fbbf24" strokeWidth="1" opacity="0.45" filter="url(#dl-blur)" />
-      <text x="150" y="113" fontSize="15" fontWeight="800" fill="#fbbf24" letterSpacing="1">GrifoSys</text>
+      <text x="150" y="113" fontSize="15" fontWeight="800" fill="#fbbf24" letterSpacing="1">Tanko</text>
 
       {/* Pilares */}
       <rect x="74" y="120" width="9" height="132" fill="#2a160c" stroke="#f59e0b" strokeOpacity="0.3" />
@@ -790,12 +790,12 @@ function PantallaCarga({
       </div>
 
       <h1 className="dl-text-gradient mt-7 text-3xl font-bold tracking-tight">
-        GrifoSys
+        Tanko
       </h1>
 
       {/* Barra de carga elegante */}
       <div className="relative mt-6 h-1.5 w-56 overflow-hidden rounded-full bg-white/10">
-        <div className="gs-progress-fill h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500" />
+        <div className="gs-progress-fill h-full rounded-full bg-gradient-to-r from-amber-400 to-emerald-600" />
         <div className="gs-progress-shine absolute inset-y-0 w-1/3" />
       </div>
 
@@ -928,11 +928,11 @@ function Fondo() {
       {/* Blobs en deriva: verde dominante + azul tenue */}
       <div className="animate-drift absolute -left-32 -top-32 h-[28rem] w-[28rem] rounded-full bg-amber-500/12 blur-[120px]" />
       <div
-        className="animate-drift absolute -bottom-44 right-1/4 h-96 w-96 rounded-full bg-orange-500/10 blur-[120px]"
+        className="animate-drift absolute -bottom-44 right-1/4 h-96 w-96 rounded-full bg-emerald-600/10 blur-[120px]"
         style={{ animationDelay: "5s" }}
       />
       <div
-        className="animate-drift absolute -right-24 top-1/4 h-80 w-80 rounded-full bg-red-500/8 blur-[120px]"
+        className="animate-drift absolute -right-24 top-1/4 h-80 w-80 rounded-full bg-green-600/8 blur-[120px]"
         style={{ animationDelay: "9s" }}
       />
 

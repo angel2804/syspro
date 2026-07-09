@@ -189,7 +189,7 @@ export default function SetupPage() {
         {/* Encabezado */}
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="flex h-11 w-11 animate-float items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 shadow-lg">
+            <span className="flex h-11 w-11 animate-float items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-green-700 shadow-lg">
               <Fuel className="h-6 w-6 text-white" />
             </span>
             <div>
@@ -249,7 +249,7 @@ export default function SetupPage() {
               <p className="mb-2 text-xs text-slate-400">¿Empieza otro trabajador?</p>
               <Button
                 onClick={() => setCambiandoTrabajador(true)}
-                className="h-11 bg-gradient-to-r from-amber-500 to-orange-600 px-6 font-bold text-white hover:from-amber-400 hover:to-orange-500"
+                className="h-11 bg-gradient-to-r from-amber-500 to-green-700 px-6 font-bold text-white hover:from-amber-400 hover:to-emerald-600"
               >
                 <Users className="mr-1.5 h-5 w-5" /> Cambiar de trabajador
               </Button>
@@ -285,7 +285,7 @@ export default function SetupPage() {
                       className={cn(
                         "relative flex flex-col items-center justify-center gap-1 rounded-xl border p-4 transition-all",
                         bloqueado
-                          ? "cursor-not-allowed border-red-500/30 bg-red-500/10"
+                          ? "cursor-not-allowed border-green-600/30 bg-green-600/10"
                           : "border-white/10 bg-white/5 hover:scale-[1.03] hover:border-amber-400/60 hover:bg-white/10",
                         elegido &&
                           "border-amber-400 bg-amber-500/20 ring-2 ring-amber-400"
@@ -333,7 +333,7 @@ export default function SetupPage() {
             <Button
               disabled={!sel || verificando || esperandoTurnos}
               onClick={() => setConfirmandoIsla(true)}
-              className="h-12 bg-gradient-to-r from-amber-500 to-orange-600 px-8 text-base font-bold text-white shadow-lg shadow-orange-900/30 hover:from-amber-400 hover:to-orange-500 disabled:opacity-40"
+              className="h-12 bg-gradient-to-r from-amber-500 to-green-700 px-8 text-base font-bold text-white shadow-lg shadow-orange-900/30 hover:from-amber-400 hover:to-emerald-600 disabled:opacity-40"
             >
               {verificando ? "Verificando…" : "Empezar turno"}
             </Button>
@@ -363,7 +363,7 @@ export default function SetupPage() {
                   className="group flex items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-accent"
                 >
                   <span className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-red-600 font-bold text-white">
+                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-emerald-600 to-green-700 font-bold text-white">
                       {nombre[0]}
                     </span>
                     <span className="font-medium">{nombre}</span>
@@ -409,7 +409,7 @@ export default function SetupPage() {
           </div>
           <div className="grid gap-2">
             <Button
-              className="h-12 bg-gradient-to-r from-amber-500 to-orange-600 text-base font-bold text-white hover:from-amber-400 hover:to-orange-500"
+              className="h-12 bg-gradient-to-r from-amber-500 to-green-700 text-base font-bold text-white hover:from-amber-400 hover:to-emerald-600"
               onClick={() => sel && confirmarIsla(sel.islaId)}
             >
               <CheckCircle2 className="mr-1.5 h-5 w-5" /> Sí, estoy en esta isla

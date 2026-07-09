@@ -18,19 +18,19 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GrifoSys",
+  title: "Tanko",
   description: "Sistema de gestión para estación de servicios",
-  applicationName: "GrifoSys",
+  applicationName: "Tanko",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "GrifoSys",
+    title: "Tanko",
   },
   formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b0f19",
+  themeColor: "#006B3D",
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",

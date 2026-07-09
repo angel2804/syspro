@@ -31,7 +31,7 @@ export interface OpcionesPDF {
 // Construye el HTML del estado de cuenta (exportado aparte para poder testear/
 // reutilizar la maqueta sin abrir una ventana).
 export function htmlEstadoCuenta(o: OpcionesPDF): string {
-  const { nombreCliente, filas, resumen, empresa = "GrifoSys PRO", rango } = o;
+  const { nombreCliente, filas, resumen, empresa = "Tanko", rango } = o;
   const filasHtml = filas
     .map((f) => {
       const prod = f.producto ? PRODUCTOS[f.producto] : "";

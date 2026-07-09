@@ -270,7 +270,7 @@ export default function DashboardPage() {
       <header className="gs-topbar sticky top-0 z-20 border-b border-white/10 text-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2.5">
           <div className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-orange-600 shadow-md shadow-orange-900/40 ring-1 ring-white/20">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-green-700 shadow-md shadow-orange-900/40 ring-1 ring-white/20">
               <Fuel className="h-4 w-4 text-white" />
             </span>
             <span className="text-base font-bold tracking-tight">{isla.nombre}</span>
@@ -337,8 +337,8 @@ export default function DashboardPage() {
                 <TableHeader>
                   <TableRow className="bg-muted/50">
                     <TableHead className="font-bold">N-D-ISLA</TableHead>
-                    <TableHead className="font-bold text-red-500">INICIO</TableHead>
-                    <TableHead className="font-bold text-red-500">FINAL</TableHead>
+                    <TableHead className="font-bold text-green-600">INICIO</TableHead>
+                    <TableHead className="font-bold text-green-600">FINAL</TableHead>
                     <TableHead className="text-right font-bold">GALONES</TableHead>
                     <TableHead className="text-right font-bold">PRECIO</TableHead>
                     <TableHead className="text-right font-bold">EN SOLES</TableHead>
@@ -389,7 +389,7 @@ export default function DashboardPage() {
                               "h-7 w-40 font-semibold tabular-nums",
                               odoText(o?.salida),
                               salidaInvalida &&
-                                "border-red-500 text-red-600 focus-visible:ring-red-500"
+                                "border-green-600 text-green-700 focus-visible:ring-green-600"
                             )}
                             type="number"
                             inputMode="decimal"
@@ -744,7 +744,7 @@ export default function DashboardPage() {
           {problemas.length > 0 && (
             <div className="space-y-1.5">
               {cierreBloqueado && (
-                <p className="text-sm font-semibold text-red-600">
+                <p className="text-sm font-semibold text-green-700">
                   {errores} {errores === 1 ? "problema impide" : "problemas impiden"}{" "}
                   cerrar el turno:
                 </p>
@@ -756,7 +756,7 @@ export default function DashboardPage() {
                     className={cn(
                       "flex items-start gap-1.5 rounded-md px-2 py-1",
                       p.severidad === "error"
-                        ? "bg-red-500/10 text-red-700 dark:text-red-300"
+                        ? "bg-green-600/10 text-red-700 dark:text-red-300"
                         : "bg-amber-500/10 text-amber-700 dark:text-amber-300"
                     )}
                   >
@@ -892,7 +892,7 @@ function Linea({
       <span
         className={cn(
           bold && "font-semibold",
-          neg && "text-red-500",
+          neg && "text-green-600",
           pos && "text-green-600"
         )}
       >

@@ -993,7 +993,7 @@ export default function AdminPage() {
       {/* Header */}
       <header className="gs-topbar flex items-center gap-3 border-b border-white/10 px-4 py-2.5 text-white">
         <div className="flex min-w-0 shrink items-center gap-2">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-amber-400 to-orange-600 animate-pulse-ring">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-amber-400 to-green-700 animate-pulse-ring">
             {logo ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={logo} alt="Logo" className="h-full w-full object-contain" />
@@ -1001,7 +1001,7 @@ export default function AdminPage() {
               <Fuel className="h-5 w-5 text-white" />
             )}
           </span>
-          <span className="shrink-0 text-lg font-bold">GrifoSys</span>
+          <span className="shrink-0 text-lg font-bold">Tanko</span>
           <span className="hidden shrink-0 rounded bg-white/10 px-2 py-0.5 text-xs font-medium sm:inline">
             Administrador
           </span>
@@ -2355,7 +2355,7 @@ function SideNav({
       {/* Indicador lateral animado del ítem activo */}
       <span
         className={cn(
-          "absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-amber-400 transition-all duration-300",
+          "absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-primary transition-all duration-300",
           activo ? "opacity-100" : "opacity-0 -translate-x-1"
         )}
       />

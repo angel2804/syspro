@@ -207,7 +207,7 @@ function dibujarEncabezadoDoc(d: PdfDoc, titulo: string, subtitulo?: string) {
   // Banda superior de marca
   d.rect(0, PAGE_H - 70, PAGE_W, 70, COL.marca);
   d.rect(0, PAGE_H - 74, PAGE_W, 4, COL.marcaOsc);
-  d.texto(MARGIN, PAGE_H - 40, "GrifoSys", 20, COL.blanco, true);
+  d.texto(MARGIN, PAGE_H - 40, "Tanko", 20, COL.blanco, true);
   d.texto(MARGIN, PAGE_H - 58, titulo, 11, COL.blanco);
   const hoy = new Date().toLocaleString("es-PE", { dateStyle: "short", timeStyle: "short" });
   d.textoDer(PAGE_W - MARGIN, PAGE_H - 40, "Generado", 8, COL.blanco);
@@ -367,7 +367,7 @@ function generarPDF(secciones: SeccionCliente[]): Buffer {
   const conPie = contenidos.map((c, i) => {
     let pie = "";
     pie += `${COL.suave[0]} ${COL.suave[1]} ${COL.suave[2]} rg\n`;
-    pie += `BT /F1 8 Tf ${MARGIN} 26 Td (${pdfEscape(`GrifoSys · Créditos por cliente`)}) Tj ET\n`;
+    pie += `BT /F1 8 Tf ${MARGIN} 26 Td (${pdfEscape(`Tanko · Créditos por cliente`)}) Tj ET\n`;
     const num = `Página ${i + 1} de ${total}`;
     pie += `BT /F1 8 Tf ${PAGE_W - MARGIN - anchoTexto(num, 8)} 26 Td (${pdfEscape(num)}) Tj ET\n`;
     pie += `${COL.linea[0]} ${COL.linea[1]} ${COL.linea[2]} RG\n0.6 w ${MARGIN} 38 m ${PAGE_W - MARGIN} 38 l S\n`;
@@ -497,7 +497,7 @@ function llenarHojaCliente(ws: ExcelJS.Worksheet, sec: SeccionCliente, startRow:
 async function generarExcelTodos(secciones: SeccionCliente[]) {
   const { estilo } = await cargarPlantilla();
   const out = new ExcelJS.Workbook();
-  out.creator = "GrifoSys";
+  out.creator = "Tanko";
   const usados = new Set<string>();
   const CABECERAS = ["FECHA", "CLIENTE", "PRODUCTO", "VALE", "PRECIO", "TOTAL CREDITO", "PAGOS", "DEUDA PENDIENTE"];
 

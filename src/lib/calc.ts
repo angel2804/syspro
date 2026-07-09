@@ -452,7 +452,7 @@ export function construirCSVReporte(
   const rep = calcularReporteDia(filtradas, dia, precios);
   const rows: (string | number)[][] = [];
 
-  rows.push(["Reporte GrifoSys"]);
+  rows.push(["Reporte Tanko"]);
   rows.push(["Día", dia]);
   rows.push(["Turno", turno === "general" ? "General (todo el día)" : turno]);
   rows.push(["Isla", islaId === "todas" ? "Todas" : (getIsla(islaId)?.nombre ?? islaId)]);
