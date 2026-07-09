@@ -102,6 +102,7 @@ import {
   TrendingDown,
   Banknote,
   NotebookPen,
+  Droplet,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -1119,6 +1120,17 @@ export default function AdminPage() {
                   <ScrollText className="h-4 w-4" />
                 </span>
                 Auditoría
+              </Link>
+            )}
+            {can("config") && (
+              <Link
+                href="/admin/inventario"
+                className="group relative flex w-full items-center gap-2 overflow-hidden rounded-lg px-3 py-2 text-sm font-medium text-foreground transition-all duration-200 hover:translate-x-0.5 hover:bg-accent"
+              >
+                <span className="transition-transform duration-200 group-hover:scale-110">
+                  <Droplet className="h-4 w-4" />
+                </span>
+                Inventario de Tanques
               </Link>
             )}
           </nav>
