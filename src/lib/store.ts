@@ -21,7 +21,7 @@ import type {
   TurnoId,
 } from "./types";
 import { getIsla, PERMISOS_TODOS, PRECIOS_DEFAULT, TRABAJADORES_DEFAULT } from "./config";
-import { aprenderClientes } from "./clientes";
+import { aprenderClientes } from "./clientes-autocompletado";
 import {
   diaActivoParaNuevosTurnos,
   diaOperativo,
@@ -84,6 +84,7 @@ interface StoreState {
   clientesDescuento: string[]; // nombres libres usados en descuentos, sincronizados con config/clientes_descuento
   admins: Admin[]; // administradores con nombre+contraseña, sincronizados con config/admins
   logo: string | null; // logo de la empresa (data URL), sincronizado con config/logo
+  nombreGrifo: string; // nombre del grifo cliente (aparece en sus reportes), sincronizado con config/grifo
 
   setPrecios: (p: Precios) => void;
   setPrecio: (k: PrecioKey, v: number) => void;
@@ -92,6 +93,7 @@ interface StoreState {
   setClientesDescuento: (c: string[]) => void;
   setAdmins: (a: Admin[]) => void;
   setLogo: (url: string | null) => void;
+  setNombreGrifo: (nombre: string) => void;
   // Aprende uno o más nombres de cliente: los agrega a la lista si no existen
   // (sin distinguir mayúsculas/acentos). Devuelve true si la lista cambió.
   aprenderClientes: (nombres: (string | undefined)[]) => boolean;
@@ -214,6 +216,7 @@ export const useStore = create<StoreState>()(
       clientesDescuento: [],
       admins: [],
       logo: null,
+      nombreGrifo: "Tanko",
 
       setPrecios: (p) => set({ precios: p }),
       setPrecio: (k, v) => set((s) => ({ precios: { ...s.precios, [k]: v } })),
@@ -222,6 +225,7 @@ export const useStore = create<StoreState>()(
       setClientesDescuento: (c) => set({ clientesDescuento: c }),
       setAdmins: (a) => set({ admins: a }),
       setLogo: (url) => set({ logo: url }),
+      setNombreGrifo: (nombre) => set({ nombreGrifo: nombre }),
       aprenderClientes: (nombres) => {
         const actuales = get().clientes;
         const siguientes = aprenderClientes(actuales, nombres);
@@ -606,6 +610,7 @@ export const useStore = create<StoreState>()(
         if (!state.trabajadores) state.trabajadores = [...TRABAJADORES_DEFAULT];
         if (!state.admins) state.admins = [];
         if (state.logo === undefined) state.logo = null;
+        if (!state.nombreGrifo) state.nombreGrifo = "Tanko";
         return state;
       },
     }

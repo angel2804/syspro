@@ -91,6 +91,7 @@ export default function LoginPage() {
   const syncEstado = useStore((s) => s.sync.estado);
   const trabajadores = useStore((s) => s.trabajadores);
   const logo = useStore((s) => s.logo);
+  const nombreGrifo = useStore((s) => s.nombreGrifo);
 
   const [modo, setModo] = useState<Modo>("inicio");
   const [email, setEmail] = useState("");
@@ -410,7 +411,7 @@ export default function LoginPage() {
                   Bienvenido
                 </p>
                 <h2 className="mt-1 text-3xl font-semibold tracking-tight">
-                  Tanko <span className="text-amber-300">Operativo</span>
+                  {nombreGrifo} <span className="text-amber-300">Operativo</span>
                 </h2>
                 <p className="mt-2 text-sm text-amber-50/50">
                   Selecciona cómo deseas ingresar al sistema.

@@ -11,7 +11,7 @@ import {
   subscribeSesiones,
   upsertSesion,
 } from "@/lib/db";
-import { normalizarCliente } from "@/lib/clientes";
+import { normalizarCliente } from "@/lib/clientes-autocompletado";
 import {
   guardarSesionPendiente,
   leerSesionPendiente,
@@ -19,6 +19,39 @@ import {
 } from "@/lib/offline-sesion";
 import { supabaseHabilitado } from "@/lib/supabase";
 import type { Admin, Precios, Sesion } from "@/lib/types";
+
+type StoreState = ReturnType<typeof useStore.getState>;
+
+// Observa una lista de clientes del store y sube (debounced, aditivo) SOLO los
+// nombres nuevos aprendidos localmente. Compartida por la lista de crédito y la
+// de descuento. Devuelve la función de limpieza para el efecto.
+function suscribirSubidaClientesNuevos(
+  getLista: (s: StoreState) => string[],
+  subir: (nombres: string[]) => Promise<void>
+): () => void {
+  let prev = getLista(useStore.getState());
+  let buffer: string[] = [];
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const unsub = useStore.subscribe(() => {
+    const curr = getLista(useStore.getState());
+    if (curr === prev) return;
+    const vistos = new Set(prev.map(normalizarCliente));
+    const nuevos = curr.filter((c) => !vistos.has(normalizarCliente(c)));
+    prev = curr;
+    if (nuevos.length === 0) return; // solo se quitaron clientes: no subir nada
+    buffer.push(...nuevos);
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      const aSubir = buffer;
+      buffer = [];
+      subir(aSubir).catch(() => {});
+    }, 1000);
+  });
+  return () => {
+    if (timer) clearTimeout(timer);
+    unsub();
+  };
+}
 
 // Sincroniza el store (localStorage) con Supabase:
 //  - al iniciar y en vivo: trae una VENTANA RECIENTE de sesiones (hoy y ayer)
@@ -37,6 +70,7 @@ export function SupabaseSync() {
   const setClientesDescuento = useStore((s) => s.setClientesDescuento);
   const setAdmins = useStore((s) => s.setAdmins);
   const setLogo = useStore((s) => s.setLogo);
+  const setNombreGrifo = useStore((s) => s.setNombreGrifo);
 
   useEffect(() => {
     if (!auth?.userId) return;
@@ -83,6 +117,14 @@ export function SupabaseSync() {
     });
   }, [auth?.userId, setLogo]);
 
+  // Nombre del grifo cliente en vivo (config/grifo)
+  useEffect(() => {
+    if (!supabaseHabilitado || !auth?.userId) return;
+    return subscribeConfig<{ nombre: string }>("grifo", (v) => {
+      if (v.nombre) setNombreGrifo(v.nombre);
+    });
+  }, [auth?.userId, setNombreGrifo]);
+
   // Lista de clientes en vivo (config/clientes). La lista remota es la
   // AUTORITATIVA: se reemplaza la local por la remota. Así las eliminaciones
   // que hace el admin se propagan a todos los dispositivos (un merge por unión
@@ -110,57 +152,19 @@ export function SupabaseSync() {
   // cambio: si este dispositivo tenía un cliente que el admin ya había
   // eliminado, lo volvía a subir y "resucitaba". Ahora solo se envían los
   // nombres que NO estaban antes; las eliminaciones las maneja el admin (su
-  // escritura autoritativa) y nunca se pisan.
+  // escritura autoritativa) y nunca se pisan. La misma lógica sirve para la
+  // lista de crédito y la de descuento (ver suscribirSubidaClientesNuevos).
   useEffect(() => {
     if (!supabaseHabilitado || !auth?.userId) return;
-    let prev = useStore.getState().clientes;
-    let buffer: string[] = [];
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const unsub = useStore.subscribe(() => {
-      const curr = useStore.getState().clientes;
-      if (curr === prev) return;
-      const vistos = new Set(prev.map(normalizarCliente));
-      const nuevos = curr.filter((c) => !vistos.has(normalizarCliente(c)));
-      prev = curr;
-      if (nuevos.length === 0) return; // solo se quitaron clientes: no subir nada
-      buffer.push(...nuevos);
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        const aSubir = buffer;
-        buffer = [];
-        addClientesRemoto(aSubir).catch(() => {});
-      }, 1000);
-    });
-    return () => {
-      if (timer) clearTimeout(timer);
-      unsub();
-    };
+    return suscribirSubidaClientesNuevos((s) => s.clientes, addClientesRemoto);
   }, [auth?.userId]);
 
   useEffect(() => {
     if (!supabaseHabilitado || !auth?.userId) return;
-    let prev = useStore.getState().clientesDescuento;
-    let buffer: string[] = [];
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const unsub = useStore.subscribe(() => {
-      const curr = useStore.getState().clientesDescuento;
-      if (curr === prev) return;
-      const vistos = new Set(prev.map(normalizarCliente));
-      const nuevos = curr.filter((c) => !vistos.has(normalizarCliente(c)));
-      prev = curr;
-      if (nuevos.length === 0) return;
-      buffer.push(...nuevos);
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        const aSubir = buffer;
-        buffer = [];
-        addClientesDescuentoRemoto(aSubir).catch(() => {});
-      }, 1000);
-    });
-    return () => {
-      if (timer) clearTimeout(timer);
-      unsub();
-    };
+    return suscribirSubidaClientesNuevos(
+      (s) => s.clientesDescuento,
+      addClientesDescuentoRemoto
+    );
   }, [auth?.userId]);
 
   // Ventana reciente de sesiones en vivo (hoy y ayer) + guardado de la activa

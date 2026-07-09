@@ -10,7 +10,7 @@ import {
 } from "react";
 import { Input } from "@/components/ui/input";
 import { User } from "lucide-react";
-import { normalizarCliente } from "@/lib/clientes";
+import { normalizarCliente } from "@/lib/clientes-autocompletado";
 import { cn } from "@/lib/utils";
 
 interface Props {

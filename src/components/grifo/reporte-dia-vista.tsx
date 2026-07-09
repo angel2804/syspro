@@ -25,7 +25,7 @@ import {
   TURNOS,
 } from "@/lib/config";
 import { calcularReporteDia, preciosDe, soles } from "@/lib/calc";
-import { clientesOrdenados } from "@/lib/clientes";
+import { clientesOrdenados } from "@/lib/clientes-autocompletado";
 import { useStore } from "@/lib/store";
 import type { PagoElectronico, Precios, ProductoId, Sesion, TurnoId } from "@/lib/types";
 import type { Col } from "./registro-fields";

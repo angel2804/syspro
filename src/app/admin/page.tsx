@@ -3,15 +3,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
@@ -24,6 +21,7 @@ import {
   fetchBackups,
   fetchSesionesDesde,
   restaurarBackup,
+  setGrifoRemoto,
   setLogoRemoto,
   setPreciosRemoto,
   setClientesDescuentoRemoto,
@@ -35,53 +33,44 @@ import {
   type Backup,
 } from "@/lib/db";
 import { sincronizarCreditosSesion } from "@/lib/data/creditos";
-import { clientesOrdenados } from "@/lib/clientes";
 import { entradaAutomatica, uid, useStore } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
 import { authHeaders, logoutSupabase } from "@/lib/data/auth";
-import {
-  fetchHistorialPrecios,
-  registrarCambioPrecio,
-  type PrecioEvento,
-} from "@/lib/data/precios";
+import { registrarCambioPrecio } from "@/lib/data/precios";
 import {
   fetchUltimosRegistrosTanques,
   type TanqueRegistro,
 } from "@/lib/data/tanques";
 import { registrarAuditoria } from "@/lib/data/auditoria";
 import {
-  BALONES,
   getIsla,
   ISLAS,
   PERMISOS_TODOS,
-  PRODUCTOS,
-  TURNOS,
   turnoLabel,
 } from "@/lib/config";
 import {
-  calcularReporteDia,
   diaMenos,
   diaOperativo,
   diaOperativoActual,
   diasConAlgunaSesionCerrada,
   diasCompletos,
   islasCerradasDeTurno,
-  soles,
   turnosCompletosDeDia,
   turnosConAlgunaIslaCerrada,
 } from "@/lib/calc";
-import type { Permiso, PrecioKey, Precios, ProductoId, Rol, Sesion, TurnoId } from "@/lib/types";
+import type { Permiso, PrecioKey, Precios, Rol, Sesion, TurnoId } from "@/lib/types";
 import { cn, descargarBlob } from "@/lib/utils";
 import { SesionVista } from "@/components/grifo/sesion-vista";
 import { ReporteDiaVista } from "@/components/grifo/reporte-dia-vista";
 import { ThemeToggle } from "@/components/theme-toggle";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { EstadoVacio, NavLabel, SideNav } from "@/features/admin/ui-admin";
+import { PreciosEditor } from "@/features/admin/precios-editor";
+import { EstadisticasSistema } from "@/features/admin/estadisticas-sistema";
+import { VistaMover } from "@/features/admin/vista-mover";
+import { VistaUsuarios } from "@/features/admin/vista-usuarios";
+import { VistaClientes } from "@/features/admin/vista-clientes";
+import { VistaExportar } from "@/features/admin/vista-exportar";
+import { VistaConfig } from "@/features/admin/vista-config";
 import {
   Fuel,
   LogOut,
@@ -89,24 +78,14 @@ import {
   Activity,
   BarChart3,
   CalendarDays,
-  Tag,
   Users,
   Contact,
   Download,
-  Trash2,
   Settings,
-  AlertTriangle,
-  DatabaseBackup,
-  RotateCcw,
   Save,
   ArrowLeftRight,
   Wallet,
   ScrollText,
-  History,
-  TrendingUp,
-  TrendingDown,
-  Banknote,
-  NotebookPen,
   Droplet,
 } from "lucide-react";
 import Link from "next/link";
@@ -181,6 +160,8 @@ export default function AdminPage() {
   const setClientesDescuentoStore = useStore((s) => s.setClientesDescuento);
   const logo = useStore((s) => s.logo);
   const setLogo = useStore((s) => s.setLogo);
+  const nombreGrifo = useStore((s) => s.nombreGrifo);
+  const setNombreGrifo = useStore((s) => s.setNombreGrifo);
 
   // Una sola fuente acotada y en vivo: los últimos 60 días operativos.
   // Incluye tanto los turnos activos como los días recientes para reporte/
@@ -584,6 +565,27 @@ export default function AdminPage() {
     toast.success("Logo restablecido");
   }
 
+  // ---- Nombre del grifo (aparece en los reportes/PDFs del cliente) ----
+  // El input es de edición local; cuando el valor remoto (sincronizado por
+  // Realtime) cambia, se re-siembra el input durante el render en vez de con un
+  // efecto (evita el render en cascada que marca react-hooks/set-state-in-effect).
+  const [nombreGrifoLocal, setNombreGrifoLocal] = useState(nombreGrifo);
+  const [nombreGrifoPrev, setNombreGrifoPrev] = useState(nombreGrifo);
+  if (nombreGrifo !== nombreGrifoPrev) {
+    setNombreGrifoPrev(nombreGrifo);
+    setNombreGrifoLocal(nombreGrifo);
+  }
+  function guardarNombreGrifo() {
+    const nombre = nombreGrifoLocal.trim();
+    if (!nombre || nombre === nombreGrifo) {
+      setNombreGrifoLocal(nombreGrifo);
+      return;
+    }
+    setNombreGrifo(nombre);
+    setGrifoRemoto(nombre).catch(() => {});
+    toast.success("Nombre del grifo actualizado");
+  }
+
   // ---- Exportar reporte a Excel (plantilla por isla) ----
   async function descargarXlsx() {
     if (!selectedDia) return;
@@ -907,7 +909,6 @@ export default function AdminPage() {
     }
     const dia = diaOperativo(moverOrigen);
     const turno = moverOrigen.turno;
-    // eslint-disable-next-line react-hooks/purity
     const ahora = Date.now();
     const islaOrigenNom = getIsla(moverOrigen.islaId)?.nombre ?? moverOrigen.islaId;
     const islaDestNom = getIsla(moverDestinoIsla)?.nombre ?? moverDestinoIsla;
@@ -1303,638 +1304,81 @@ export default function AdminPage() {
               />
             )
           ) : vista === "mover" ? (
-            <div className="max-w-md animate-fade-up rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
-              <h3 className="mb-1 flex items-center gap-2 text-base font-bold">
-                <ArrowLeftRight className="h-4 w-4" /> Mover trabajador de isla
-              </h3>
-              <p className="mb-3 text-xs text-muted-foreground">
-                Corrige cuando un trabajador eligió la isla equivocada. Se mueve
-                su nombre y todos sus registros (pagos, créditos, ventas,
-                gastos…) a la isla correcta. <b>Los odómetros NO se mueven</b>:
-                pertenecen a la isla física y se quedan donde están.
-              </p>
-              {activos.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  No hay turnos activos para mover.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <Label className="text-xs">Trabajador / isla actual</Label>
-                    <Select
-                      value={moverOrigenId ?? ""}
-                      onValueChange={(v) => {
-                        setMoverOrigenId(v);
-                        setMoverDestinoIsla(null);
-                      }}
-                    >
-                      <SelectTrigger className="h-9 w-full">
-                        <SelectValue placeholder="Elige el turno a corregir" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {activos.map((s) => {
-                          const isla = getIsla(s.islaId);
-                          return (
-                            <SelectItem key={s.id} value={s.id}>
-                              {isla?.nombre} · {turnoLabel(s.turno)} ·{" "}
-                              {s.trabajador}
-                            </SelectItem>
-                          );
-                        })}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {moverOrigen && (
-                    <div className="space-y-1">
-                      <Label className="text-xs">Isla correcta (destino)</Label>
-                      <Select
-                        value={moverDestinoIsla ?? ""}
-                        onValueChange={(v) => setMoverDestinoIsla(v)}
-                      >
-                        <SelectTrigger className="h-9 w-full">
-                          <SelectValue placeholder="Elige la isla destino" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {islasDestino.map((i) => (
-                            <SelectItem key={i.id} value={i.id}>
-                              {i.nombre}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                  {moverOrigen && moverDestinoIsla && (
-                    <div
-                      className={cn(
-                        "rounded-lg border p-3 text-xs",
-                        destinoCerrado
-                          ? "border-red-300 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-950/20 dark:text-red-300"
-                          : "border-sky-300/60 bg-sky-50 text-sky-800 dark:border-sky-500/30 dark:bg-sky-950/20 dark:text-sky-200"
-                      )}
-                    >
-                      {destinoCerrado ? (
-                        <span>
-                          La isla destino ya cerró su turno; no se puede mover
-                          ahí.
-                        </span>
-                      ) : moverDestino ? (
-                        <span>
-                          <b>Intercambio.</b> {moverOrigen.trabajador} pasará a{" "}
-                          <b>{getIsla(moverDestinoIsla)?.nombre}</b> y{" "}
-                          {moverDestino.trabajador} pasará a{" "}
-                          <b>{getIsla(moverOrigen.islaId)?.nombre}</b>. Cada isla
-                          conserva su odómetro.
-                        </span>
-                      ) : (
-                        <span>
-                          <b>Mover a isla libre.</b> {moverOrigen.trabajador}{" "}
-                          pasará a <b>{getIsla(moverDestinoIsla)?.nombre}</b> con
-                          el odómetro propio de esa isla. El turno de{" "}
-                          {getIsla(moverOrigen.islaId)?.nombre} se eliminará
-                          (como si nunca se hubiera abierto ahí); su odómetro no
-                          se rompe.
-                        </span>
-                      )}
-                    </div>
-                  )}
-
-                  <Button
-                    className="w-full"
-                    disabled={!moverOrigen || !moverDestinoIsla || destinoCerrado}
-                    onClick={() => setConfirmandoMover(true)}
-                  >
-                    <ArrowLeftRight className="mr-1 h-4 w-4" /> Mover trabajador
-                  </Button>
-                </div>
-              )}
-            </div>
+            <VistaMover
+              activos={activos}
+              moverOrigenId={moverOrigenId}
+              setMoverOrigenId={setMoverOrigenId}
+              setMoverDestinoIsla={setMoverDestinoIsla}
+              moverOrigen={moverOrigen}
+              moverDestinoIsla={moverDestinoIsla}
+              islasDestino={islasDestino}
+              moverDestino={moverDestino}
+              destinoCerrado={destinoCerrado}
+              setConfirmandoMover={setConfirmandoMover}
+            />
           ) : vista === "usuarios" ? (
-            <div className="max-w-md rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
-              <h3 className="mb-1 text-base font-bold">Gestión de usuarios</h3>
-              <p className="mb-3 text-xs text-muted-foreground">
-                Trabajadores que pueden iniciar sesión y elegir turno. Los
-                cambios se aplican en todo el sistema al instante.
-              </p>
-              <div className="mb-3 flex gap-2">
-                <Input
-                  placeholder="Nombre del trabajador"
-                  value={nuevoNombre}
-                  onChange={(e) => setNuevoNombre(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && agregarTrabajador()}
-                  className="h-9"
-                />
-                <Button size="sm" className="h-9" onClick={agregarTrabajador}>
-                  + Agregar
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {trabajadores.length === 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    No hay trabajadores registrados.
-                  </p>
-                )}
-                {trabajadores.map((nombre) => (
-                  <div
-                    key={nombre}
-                    className="flex items-center justify-between rounded-lg border p-2 text-sm"
-                  >
-                    <span className="flex items-center gap-2">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-xs font-bold text-white">
-                        {nombre[0]}
-                      </span>
-                      {nombre}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 px-2 text-red-500 hover:text-red-600"
-                      onClick={() => quitarTrabajador(nombre)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <VistaUsuarios
+              nuevoNombre={nuevoNombre}
+              setNuevoNombre={setNuevoNombre}
+              agregarTrabajador={agregarTrabajador}
+              trabajadores={trabajadores}
+              quitarTrabajador={quitarTrabajador}
+            />
           ) : vista === "clientes" ? (
-            (() => {
-              const POR_PAGINA = 30;
-              const esDescuento = tipoClientes === "descuento";
-              const listaClientes = esDescuento ? clientesDescuento : clientes;
-              const ordenados = clientesOrdenados(listaClientes);
-              const totalPaginas = Math.max(1, Math.ceil(ordenados.length / POR_PAGINA));
-              const pagina = Math.min(paginaCliente, totalPaginas - 1);
-              const visibles = ordenados.slice(
-                pagina * POR_PAGINA,
-                pagina * POR_PAGINA + POR_PAGINA
-              );
-              return (
-                <div className="max-w-3xl rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
-                  <h3 className="mb-1 text-base font-bold">Gestión de clientes</h3>
-                  <p className="mb-3 text-xs text-muted-foreground">
-                    Clientes de crédito y clientes de descuento se manejan por separado.
-                    El mismo nombre puede existir en ambas listas sin mezclarse.
-                  </p>
-                  <div className="mb-3 inline-flex rounded-lg border bg-muted/40 p-1">
-                    <Button
-                      size="sm"
-                      variant={!esDescuento ? "default" : "ghost"}
-                      className="h-8"
-                      onClick={() => {
-                        setTipoClientes("credito");
-                        setPaginaCliente(0);
-                      }}
-                    >
-                      Clientes crédito
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={esDescuento ? "default" : "ghost"}
-                      className="h-8"
-                      onClick={() => {
-                        setTipoClientes("descuento");
-                        setPaginaCliente(0);
-                      }}
-                    >
-                      Clientes descuento
-                    </Button>
-                  </div>
-                  <div className="mb-3 flex max-w-md gap-2">
-                    <Input
-                      placeholder={esDescuento ? "Cliente para descuento" : "Cliente de crédito"}
-                      value={nuevoCliente}
-                      onChange={(e) => setNuevoCliente(e.target.value.toUpperCase())}
-                      onKeyDown={(e) => e.key === "Enter" && agregarCliente()}
-                      className="h-9"
-                    />
-                    <Button size="sm" className="h-9" onClick={agregarCliente}>
-                      + Agregar
-                    </Button>
-                  </div>
-                  {listaClientes.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      No hay clientes registrados.
-                    </p>
-                  ) : (
-                    <>
-                      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-                        {visibles.map((nombre) => (
-                          <div
-                            key={nombre}
-                            className="flex items-center justify-between gap-1 rounded-md border px-2 py-1 text-xs"
-                          >
-                            <span className="flex min-w-0 items-center gap-1.5">
-                              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-[10px] font-bold text-white">
-                                {nombre[0]}
-                              </span>
-                              <span className="truncate">{nombre}</span>
-                            </span>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-6 w-6 shrink-0 px-0 text-red-500 hover:text-red-600"
-                              onClick={() => quitarCliente(nombre)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                      {totalPaginas > 1 && (
-                        <div className="mt-3 flex flex-wrap items-center gap-1">
-                          {Array.from({ length: totalPaginas }, (_, i) => (
-                            <Button
-                              key={i}
-                              size="sm"
-                              variant={i === pagina ? "default" : "outline"}
-                              className="h-7 w-7 px-0 text-xs"
-                              onClick={() => setPaginaCliente(i)}
-                            >
-                              {i + 1}
-                            </Button>
-                          ))}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              );
-            })()
+            <VistaClientes
+              tipoClientes={tipoClientes}
+              setTipoClientes={setTipoClientes}
+              clientes={clientes}
+              clientesDescuento={clientesDescuento}
+              paginaCliente={paginaCliente}
+              setPaginaCliente={setPaginaCliente}
+              nuevoCliente={nuevoCliente}
+              setNuevoCliente={setNuevoCliente}
+              agregarCliente={agregarCliente}
+              quitarCliente={quitarCliente}
+            />
           ) : vista === "exportar" ? (
-            <div className="max-w-md animate-fade-up rounded-2xl border border-border/60 bg-card p-4 shadow-sm card-lift">
-              <h3 className="mb-1 text-base font-bold">Exportar reporte</h3>
-              <p className="mb-3 text-xs text-muted-foreground">
-                Elige un día (lista a la izquierda, últimos {DIAS_A_CONSERVAR} días).
-                Las ediciones que hagas en &quot;Reporte del día&quot; se reflejan
-                automáticamente la próxima vez que exportes.
-              </p>
-              {/* Aviso importante: descargar y guardar en la PC */}
-              <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-300/60 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-950/30 dark:text-amber-200">
-                <Download className="mt-0.5 h-4 w-4 shrink-0 animate-bounce" />
-                <span>
-                  <b>No olvides guardar los reportes en tu PC.</b> Los datos se
-                  conservan solo los últimos {DIAS_A_CONSERVAR} días; después se
-                  borran automáticamente. Descarga el Excel y guárdalo en una
-                  carpeta segura.
-                </span>
-              </div>
-              {!selectedDia ? (
-                <p className="text-xs text-muted-foreground">
-                  Selecciona un día en la barra lateral.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  <div className="text-xs">
-                    Día: <b>{selectedDia}</b>
-                  </div>
-
-                  {/* Por turno (3 islas) */}
-                  <div className="space-y-2 border-t pt-3">
-                    <h4 className="text-xs font-bold text-muted-foreground">
-                      POR TURNO (3 ISLAS)
-                    </h4>
-                    {turnosListos.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        Aún no hay ningún turno completo (las 3 islas de un
-                        turno deben haber finalizado) para exportar.
-                      </p>
-                    ) : (
-                      <>
-                        <Select
-                          value={exportTurno}
-                          onValueChange={(v) => setExportTurno((v as TurnoId) ?? turnosListos[0])}
-                        >
-                          <SelectTrigger className="h-9 w-full">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {TURNOS.filter((t) => turnosListos.includes(t.id)).map(
-                              (t) => (
-                                <SelectItem key={t.id} value={t.id}>
-                                  {t.label}
-                                </SelectItem>
-                              )
-                            )}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          className="w-full"
-                          onClick={descargarXlsx}
-                          disabled={exportando || !turnosListos.includes(exportTurno)}
-                        >
-                          <Download className="mr-1 h-4 w-4" />
-                          {exportando ? "Generando…" : "Descargar Excel del turno (.xlsx)"}
-                        </Button>
-                      </>
-                    )}
-                  </div>
-
-                  {/* Por turno e isla individual */}
-                  <div className="space-y-2 border-t pt-3">
-                    <h4 className="text-xs font-bold text-muted-foreground">
-                      POR ISLA INDIVIDUAL
-                    </h4>
-                    {turnosConIsla.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        Aún ninguna isla finalizó un turno este día.
-                      </p>
-                    ) : (
-                      <>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Select
-                            value={exportTurnoIsla}
-                            onValueChange={(v) =>
-                              setExportTurnoIsla((v as TurnoId) ?? turnosConIsla[0])
-                            }
-                          >
-                            <SelectTrigger className="h-9 w-full">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {TURNOS.filter((t) => turnosConIsla.includes(t.id)).map(
-                                (t) => (
-                                  <SelectItem key={t.id} value={t.id}>
-                                    {t.label}
-                                  </SelectItem>
-                                )
-                              )}
-                            </SelectContent>
-                          </Select>
-                          <Select
-                            value={exportIslaId ?? ""}
-                            onValueChange={(v) => setExportIslaId(v)}
-                          >
-                            <SelectTrigger className="h-9 w-full">
-                              <SelectValue placeholder="Isla" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {ISLAS.filter((i) => islasCerradasTurnoIsla.includes(i.id)).map(
-                                (i) => (
-                                  <SelectItem key={i.id} value={i.id}>
-                                    {i.nombre}
-                                  </SelectItem>
-                                )
-                              )}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Button
-                          className="w-full"
-                          onClick={descargarXlsxIsla}
-                          disabled={exportandoIsla || !exportIslaId}
-                        >
-                          <Download className="mr-1 h-4 w-4" />
-                          {exportandoIsla ? "Generando…" : "Descargar Excel de la isla (.xlsx)"}
-                        </Button>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="border-t pt-3">
-                    <p className="mb-2 text-xs text-muted-foreground">
-                      Reporte general del día completo (plantilla &quot;madre&quot;):
-                      ventas, clientes, vales, descuentos y formas de pago de
-                      todos los turnos.
-                    </p>
-                    <Button
-                      variant="secondary"
-                      className="w-full"
-                      onClick={descargarGeneral}
-                      disabled={exportandoGeneral}
-                    >
-                      <Download className="mr-1 h-4 w-4" />
-                      {exportandoGeneral ? "Generando…" : "Descargar reporte general (.xlsx)"}
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <VistaExportar
+              diasAConservar={DIAS_A_CONSERVAR}
+              selectedDia={selectedDia}
+              turnosListos={turnosListos}
+              exportTurno={exportTurno}
+              setExportTurno={setExportTurno}
+              descargarXlsx={descargarXlsx}
+              exportando={exportando}
+              turnosConIsla={turnosConIsla}
+              exportTurnoIsla={exportTurnoIsla}
+              setExportTurnoIsla={setExportTurnoIsla}
+              exportIslaId={exportIslaId}
+              setExportIslaId={setExportIslaId}
+              islasCerradasTurnoIsla={islasCerradasTurnoIsla}
+              descargarXlsxIsla={descargarXlsxIsla}
+              exportandoIsla={exportandoIsla}
+              descargarGeneral={descargarGeneral}
+              exportandoGeneral={exportandoGeneral}
+            />
           ) : (
             // vista === "config"
-            <div className="max-w-md rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
-              <h3 className="mb-1 flex items-center gap-2 text-base font-bold">
-                <Settings className="h-4 w-4" /> Configuraciones
-              </h3>
-              {!can("reset") && !can("backups-ver") && !can("backups-generar") ? (
-                <div className="space-y-3">
-                  <p className="text-xs text-muted-foreground">
-                    No tienes permiso para ver esta sección. Pídele al dueño el
-                    permiso de backups o de reseteo del sistema.
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Copias de seguridad */}
-                  <div className="rounded-lg border border-sky-300/60 bg-sky-50 p-3 dark:border-sky-500/30 dark:bg-sky-950/20">
-                    <h4 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-sky-700 dark:text-sky-300">
-                      <DatabaseBackup className="h-4 w-4" /> Copias de seguridad
-                    </h4>
-                    <p className="mb-3 text-xs text-muted-foreground">
-                      Instantáneas de todas las sesiones (incluidos los
-                      odómetros) y la configuración. Se crea una automáticamente
-                      al completarse cada turno (3 islas) y puedes crear una
-                      manual. Se conservan los últimos {DIAS_BACKUP} días.
-                      <br />
-                      <span className="text-[11px]">
-                        Para recuperar: usa &quot;Resetear base de datos&quot;
-                        (no borra las copias) y luego restaura un punto seguro.
-                      </span>
-                    </p>
-                    <Button
-                      size="sm"
-                      className="mb-3 w-full"
-                      onClick={backupManual}
-                      disabled={creandoBackup}
-                    >
-                      <Save className="mr-1 h-4 w-4" />
-                      {creandoBackup ? "Creando…" : "Crear copia ahora"}
-                    </Button>
-                    {backups.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        Aún no hay copias de seguridad.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {backups.map((b) => (
-                          <div
-                            key={b.id}
-                            className="animate-fade-up rounded-lg border bg-card p-2 text-xs card-lift"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div>
-                                <div className="flex items-center gap-1.5 font-semibold">
-                                  <CalendarDays className="h-3.5 w-3.5 shrink-0" /> {b.dia}
-                                  {b.nota && (
-                                    <span className="ml-1.5 rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-300">
-                                      {b.nota}
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="text-[11px] text-muted-foreground">
-                                  {new Date(b.createdAt).toLocaleString("es-PE")} ·{" "}
-                                  {b.sesiones.length} sesiones
-                                </div>
-                              </div>
-                              <div className="flex shrink-0 items-center gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 px-2"
-                                  onClick={() => descargarBackup(b)}
-                                  title="Descargar copia (.json)"
-                                >
-                                  <Download className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="secondary"
-                                  className="h-7 px-2"
-                                  onClick={() => setBackupARestaurar(b)}
-                                  disabled={restaurandoId === b.id}
-                                  title="Restaurar esta copia"
-                                >
-                                  <RotateCcw className="h-3.5 w-3.5" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 px-2 text-red-500 hover:text-red-600"
-                                  onClick={() => eliminarBackup(b.id)}
-                                  title="Eliminar copia"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Logo de la empresa */}
-                  <div className="rounded-lg border border-violet-300/60 bg-violet-50 p-3 dark:border-violet-500/30 dark:bg-violet-950/20">
-                    <h4 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-violet-700 dark:text-violet-300">
-                      <Tag className="h-4 w-4" /> Logo de la empresa
-                    </h4>
-                    <p className="mb-3 text-xs text-muted-foreground">
-                      Reemplaza el ícono del login y del panel por el logo de la
-                      empresa. Imagen PNG/JPG de máx. 500 KB.
-                    </p>
-                    <div className="flex items-center gap-3">
-                      <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-card">
-                        {logo ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={logo}
-                            alt="Logo actual"
-                            className="h-full w-full object-contain"
-                          />
-                        ) : (
-                          <Fuel className="h-7 w-7 text-amber-500" />
-                        )}
-                      </span>
-                      <div className="flex flex-col gap-2">
-                        <label className="inline-flex h-9 cursor-pointer items-center justify-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-                          {logo ? "Cambiar logo" : "Subir logo"}
-                          <input
-                            type="file"
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              onSubirLogo(e.target.files?.[0]);
-                              e.target.value = "";
-                            }}
-                          />
-                        </label>
-                        {logo && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-9"
-                            onClick={quitarLogo}
-                          >
-                            Quitar logo
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Liberar turnos abiertos (destrabar turnos de prueba) */}
-                  <div className="rounded-lg border border-orange-300/60 bg-orange-50 p-3 dark:border-orange-500/30 dark:bg-orange-950/20">
-                    <h4 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-orange-700 dark:text-orange-300">
-                      <RotateCcw className="h-4 w-4" /> Liberar turnos abiertos
-                    </h4>
-                    <p className="mb-3 text-xs text-muted-foreground">
-                      Fuerza la liberación de un turno en curso: se borra por
-                      completo y el slot queda <b>libre</b>, como si no se
-                      hubiera empezado, para que otro trabajador pueda tomarlo.
-                      Útil para destrabar turnos de prueba con trabajadores que
-                      ya no existen.
-                    </p>
-                    {activos.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        No hay turnos abiertos.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {activos.map((s) => (
-                          <div
-                            key={s.id}
-                            className="flex items-center justify-between gap-2 rounded-lg border bg-card p-2 text-xs"
-                          >
-                            <div>
-                              <div className="font-semibold">
-                                {getIsla(s.islaId)?.nombre ?? s.islaId} ·{" "}
-                                {turnoLabel(s.turno)}
-                              </div>
-                              <div className="text-[11px] text-muted-foreground">
-                                {s.trabajador || "(sin trabajador)"} · {s.diaOperativo}
-                              </div>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 shrink-0 border-orange-400 px-2 text-orange-700 hover:bg-orange-100 dark:text-orange-300 dark:hover:bg-orange-900/30"
-                              onClick={() => setTurnoALiberar(s)}
-                            >
-                              <RotateCcw className="mr-1 h-3.5 w-3.5" /> Liberar
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {can("reset") && (
-                  <div className="rounded-lg border border-red-300 bg-red-50 p-3 dark:bg-red-950/30">
-                    <h4 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-red-600">
-                      <AlertTriangle className="h-4 w-4" /> Zona de pruebas
-                    </h4>
-                    <p className="mb-3 text-xs text-muted-foreground">
-                      Borra TODO para probar el sistema de cero: turnos, créditos,
-                      pagos, clientes, historial de precios y auditoría. NO se
-                      borran las copias de seguridad, las cuentas de usuario
-                      (dueño/admin/trabajador) ni la configuración (precios y
-                      lista de trabajadores).
-                    </p>
-                    <Button
-                      variant="destructive"
-                      className="w-full"
-                      onClick={() => setConfirmandoReset(true)}
-                    >
-                      <Trash2 className="mr-1 h-4 w-4" />
-                      Resetear base de datos
-                    </Button>
-                  </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <VistaConfig
+              can={can}
+              diasBackup={DIAS_BACKUP}
+              backups={backups}
+              backupManual={backupManual}
+              creandoBackup={creandoBackup}
+              descargarBackup={descargarBackup}
+              setBackupARestaurar={setBackupARestaurar}
+              restaurandoId={restaurandoId}
+              eliminarBackup={eliminarBackup}
+              logo={logo}
+              onSubirLogo={onSubirLogo}
+              quitarLogo={quitarLogo}
+              nombreGrifoLocal={nombreGrifoLocal}
+              setNombreGrifoLocal={setNombreGrifoLocal}
+              guardarNombreGrifo={guardarNombreGrifo}
+              activos={activos}
+              setTurnoALiberar={setTurnoALiberar}
+              setConfirmandoReset={setConfirmandoReset}
+            />
           )}
         </main>
       </div>
@@ -2071,517 +1515,3 @@ export default function AdminPage() {
   );
 }
 
-// Input de precio con estado LOCAL: el valor solo se confirma (sube al store)
-// al salir del campo o presionar Enter, no en cada tecla. Así el admin puede
-// escribir "18" sin que el sistema se recargue/reinicie a mitad de la edición.
-function PrecioInput({
-  value,
-  onCommit,
-}: {
-  value: number;
-  onCommit: (v: number) => void;
-}) {
-  const [focused, setFocused] = useState(false);
-  const [local, setLocal] = useState(value ? String(value) : "");
-  const [prevValue, setPrevValue] = useState(value);
-
-  // Mientras no se está editando, refleja el valor externo (ej. otro cambio).
-  // Ajuste de estado en render (patrón recomendado por React) en vez de effect.
-  if (value !== prevValue && !focused) {
-    setPrevValue(value);
-    setLocal(value ? String(value) : "");
-  }
-
-  const commit = () => {
-    const n = Number(local);
-    onCommit(Number.isFinite(n) && n > 0 ? n : 0);
-  };
-
-  return (
-    <Input
-      type="number"
-      step="0.01"
-      inputMode="decimal"
-      className="h-9"
-      value={local}
-      onFocus={() => setFocused(true)}
-      onChange={(e) => setLocal(e.target.value)}
-      onBlur={() => {
-        setFocused(false);
-        commit();
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "Enter") {
-          commit();
-          e.currentTarget.blur();
-        }
-      }}
-      onWheel={(e) => e.currentTarget.blur()}
-    />
-  );
-}
-
-function PreciosEditor({
-  precios,
-  onChange,
-  puedeVerHistorial,
-}: {
-  precios: import("@/lib/types").Precios;
-  onChange: (
-    k: PrecioKey,
-    v: number,
-    opts?: { motivo?: string; aplica?: "proximo" | "activo" }
-  ) => void;
-  puedeVerHistorial?: boolean;
-}) {
-  const combustibles: PrecioKey[] = ["bio", "regular", "premium", "glp"];
-  const balones: PrecioKey[] = ["gasfull", "zetagas"];
-  const label = (k: PrecioKey) =>
-    (PRODUCTOS as Record<string, string>)[k] ??
-    (BALONES as Record<string, string>)[k] ??
-    k;
-  const [motivo, setMotivo] = useState("");
-  const [aplica, setAplica] = useState<"proximo" | "activo">("proximo");
-  const [verHistorial, setVerHistorial] = useState(false);
-
-  return (
-    <Dialog>
-      <DialogTrigger
-        render={
-          <Button
-            size="sm"
-            variant="secondary"
-            className="h-8 bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            <Tag className="mr-1 h-4 w-4" /> Precios
-          </Button>
-        }
-      />
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Precios del sistema</DialogTitle>
-        </DialogHeader>
-        <p className="text-xs text-muted-foreground">
-          El nuevo precio rige desde el <b>próximo turno</b>. Los turnos abiertos
-          pueden conservarlo o actualizarse si eliges <b>Aplicar ya</b>.
-        </p>
-        {/* Motivo + alcance del cambio (quedan en el historial) */}
-        <div className="grid grid-cols-1 gap-2 rounded-lg border bg-muted/40 p-2.5">
-          <div className="space-y-1">
-            <Label className="text-xs">Motivo del cambio (opcional)</Label>
-            <Input
-              className="h-8"
-              placeholder="Ej. ajuste de mayorista"
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant={aplica === "proximo" ? "default" : "outline"}
-              className="h-7 flex-1 text-xs"
-              onClick={() => setAplica("proximo")}
-            >
-              Desde próximo turno
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={aplica === "activo" ? "default" : "outline"}
-              className="h-7 flex-1 text-xs"
-              onClick={() => setAplica("activo")}
-            >
-              Aplicar ya
-            </Button>
-          </div>
-        </div>
-        <div className="space-y-3">
-          <div>
-            <h4 className="mb-1 text-xs font-bold text-muted-foreground">
-              COMBUSTIBLES (por galón)
-            </h4>
-            <div className="grid grid-cols-2 gap-2">
-              {combustibles.map((k) => (
-                <div key={k} className="space-y-1">
-                  <Label className="text-xs">{label(k)}</Label>
-                  <PrecioInput
-                    value={precios[k] || 0}
-                    onCommit={(v) => onChange(k, v, { motivo, aplica })}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-          <div>
-            <h4 className="mb-1 text-xs font-bold text-muted-foreground">
-              BALONES DE GAS (por unidad)
-            </h4>
-            <div className="grid grid-cols-2 gap-2">
-              {balones.map((k) => (
-                <div key={k} className="space-y-1">
-                  <Label className="text-xs">{label(k)}</Label>
-                  <PrecioInput
-                    value={precios[k] || 0}
-                    onCommit={(v) => onChange(k, v, { motivo, aplica })}
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-        {puedeVerHistorial && (
-          <div className="border-t pt-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-7 w-full justify-start text-xs text-muted-foreground"
-              onClick={() => setVerHistorial((v) => !v)}
-            >
-              <History className="mr-1 h-3.5 w-3.5" />
-              {verHistorial ? "Ocultar historial" : "Ver historial de precios"}
-            </Button>
-            {verHistorial && <HistorialPrecios />}
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// Historial de cambios de precio (permiso 'precios-historial'). Carga bajo
-// demanda al abrirse; más reciente primero.
-function HistorialPrecios() {
-  const [eventos, setEventos] = useState<PrecioEvento[] | null>(null);
-  useEffect(() => {
-    let vivo = true;
-    fetchHistorialPrecios({ limite: 50 })
-      .then((e) => vivo && setEventos(e))
-      .catch(() => vivo && setEventos([]));
-    return () => {
-      vivo = false;
-    };
-  }, []);
-  const label = (k: string) =>
-    (PRODUCTOS as Record<string, string>)[k] ??
-    (BALONES as Record<string, string>)[k] ??
-    k;
-  if (eventos == null)
-    return <p className="px-1 py-2 text-xs text-muted-foreground">Cargando…</p>;
-  if (eventos.length === 0)
-    return (
-      <p className="px-1 py-2 text-xs text-muted-foreground">
-        Aún no hay cambios de precio registrados.
-      </p>
-    );
-  return (
-    <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
-      {eventos.map((e) => (
-        <div key={e.id} className="rounded-md bg-muted/50 px-2 py-1 text-[11px]">
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-semibold">{label(e.producto)}</span>
-            <span className="tabular-nums">
-              {e.precioAnterior != null ? soles(e.precioAnterior) : "—"} →{" "}
-              <b>{soles(e.precioNuevo)}</b>
-            </span>
-          </div>
-          <div className="flex items-center justify-between gap-2 text-muted-foreground">
-            <span>
-              {e.cambiadoPorNombre ?? "—"}
-              {e.aplica === "activo" ? " · aplicó ya" : " · próximo turno"}
-              {e.motivo ? ` · ${e.motivo}` : ""}
-            </span>
-            <span>{new Date(e.createdAt).toLocaleString("es-PE")}</span>
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// Estado vacío reutilizable: icono en círculo + título + texto de ayuda.
-function EstadoVacio({
-  icon,
-  titulo,
-  texto,
-}: {
-  icon: React.ReactNode;
-  titulo: string;
-  texto?: string;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-border/60 bg-card/50 px-6 py-16 text-center shadow-sm">
-      <span className="flex h-11 w-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
-        {icon}
-      </span>
-      <p className="text-sm font-medium">{titulo}</p>
-      {texto && <p className="max-w-sm text-xs text-muted-foreground">{texto}</p>}
-    </div>
-  );
-}
-
-// Encabezado de grupo en el sidebar (Operación / Personal / Créditos / Sistema).
-function NavLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground first:pt-1">
-      {children}
-    </p>
-  );
-}
-
-function SideNav({
-  activo,
-  onClick,
-  icon,
-  label,
-}: {
-  activo: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "group relative flex w-full items-center gap-2 overflow-hidden rounded-lg px-3 py-2 text-sm font-medium transition-all duration-200",
-        activo
-          ? "bg-primary text-primary-foreground shadow-sm"
-          : "text-foreground hover:translate-x-0.5 hover:bg-accent"
-      )}
-    >
-      {/* Indicador lateral animado del ítem activo */}
-      <span
-        className={cn(
-          "absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-primary transition-all duration-300",
-          activo ? "opacity-100" : "opacity-0 -translate-x-1"
-        )}
-      />
-      <span className="transition-transform duration-200 group-hover:scale-110">
-        {icon}
-      </span>
-      {label}
-    </button>
-  );
-}
-
-// ===========================================================================
-// Portada de KPIs del día (vista "Turnos activos"): venta, efectivo esperado,
-// créditos y avance de turnos, comparado con el día operativo anterior.
-// ===========================================================================
-const PRODUCTOS_IDS_RESUMEN: ProductoId[] = ["bio", "regular", "premium", "glp"];
-
-const PRODUCTO_RESUMEN_COLOR: Record<ProductoId, { text: string; bar: string }> = {
-  bio: { text: "text-zinc-600 dark:text-zinc-300", bar: "bg-zinc-500" },
-  regular: { text: "text-green-600 dark:text-green-300", bar: "bg-green-500" },
-  premium: { text: "text-sky-600 dark:text-sky-300", bar: "bg-sky-500" },
-  glp: { text: "text-orange-600 dark:text-orange-300", bar: "bg-orange-500" },
-};
-
-function EstadisticasSistema({
-  remote,
-  precios,
-  activos,
-  tanques,
-}: {
-  remote: Sesion[];
-  precios: Precios;
-  activos: number;
-  tanques: TanqueRegistro[];
-}) {
-  const kpi = useMemo(() => {
-    const hoyOp = diaOperativoActual();
-    const ayerOp = diaMenos(hoyOp, 1);
-    const sesHoy = remote.filter((s) => diaOperativo(s) === hoyOp);
-    const sesAyer = remote.filter((s) => diaOperativo(s) === ayerOp);
-    return {
-      hoy: calcularReporteDia(sesHoy, hoyOp, precios),
-      ayer: calcularReporteDia(sesAyer, ayerOp, precios),
-      cerradosHoy: sesHoy.filter((s) => s.cerrada).length,
-      hoyOp,
-    };
-  }, [remote, precios]);
-
-  // Variación % de la venta vs. el día anterior (null si ayer no tuvo venta).
-  const delta =
-    kpi.ayer.ventaTotal > 0.01
-      ? ((kpi.hoy.ventaTotal - kpi.ayer.ventaTotal) / kpi.ayer.ventaTotal) * 100
-      : null;
-  const galonesHoy = PRODUCTOS_IDS_RESUMEN.map((producto) => ({
-    producto,
-    galones: kpi.hoy.porProducto.find((f) => f.producto === producto)?.galones ?? 0,
-  }));
-  const totalGalones = galonesHoy.reduce((a, p) => a + p.galones, 0);
-
-  return (
-    <section className="space-y-4">
-      <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-lg font-bold">Estadisticas del sistema</h2>
-            <p className="text-xs text-muted-foreground">
-              Resumen operativo del dia {kpi.hoyOp}
-            </p>
-          </div>
-          <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-            Vista general
-          </span>
-        </div>
-        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-      <KpiCard
-        icon={<Banknote className="h-4 w-4" />}
-        label="Venta del día"
-        valor={soles(kpi.hoy.ventaTotal)}
-        pie={
-          delta == null ? (
-            <span className="text-muted-foreground">Sin venta ayer para comparar</span>
-          ) : (
-            <span
-              className={cn(
-                "flex items-center gap-1 font-medium",
-                delta >= 0 ? "text-emerald-600" : "text-red-600"
-              )}
-            >
-              {delta >= 0 ? (
-                <TrendingUp className="h-3.5 w-3.5" />
-              ) : (
-                <TrendingDown className="h-3.5 w-3.5" />
-              )}
-              {delta >= 0 ? "+" : ""}
-              {delta.toFixed(0)}% vs ayer
-            </span>
-          )
-        }
-      />
-      <KpiCard
-        icon={<Wallet className="h-4 w-4" />}
-        label="Efectivo esperado"
-        valor={soles(kpi.hoy.efectivoAEntregar)}
-        pie={<span className="text-muted-foreground">A entregar al encargado</span>}
-      />
-      <KpiCard
-        icon={<NotebookPen className="h-4 w-4" />}
-        label="Créditos del día"
-        valor={soles(kpi.hoy.totalCreditos)}
-        pie={<span className="text-muted-foreground">Vales a cuenta corriente</span>}
-      />
-      <KpiCard
-        icon={<Activity className="h-4 w-4" />}
-        label="Turnos"
-        valor={`${activos} activo${activos === 1 ? "" : "s"}`}
-        pie={
-          <span className="text-muted-foreground">
-            {kpi.cerradosHoy}/9 turnos cerrados hoy
-          </span>
-        }
-      />
-        </div>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
-        <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-semibold">Venta por combustible</h3>
-            <span className="text-xs text-muted-foreground">
-              {totalGalones.toLocaleString("es-PE", { maximumFractionDigits: 1 })} gal
-            </span>
-          </div>
-          <div className="space-y-3">
-            {galonesHoy.map(({ producto, galones }) => {
-              const pct = totalGalones > 0 ? Math.round((galones / totalGalones) * 100) : 0;
-              return (
-                <div key={producto}>
-                  <div className="mb-1 flex items-center justify-between text-sm">
-                    <span className={`font-medium ${PRODUCTO_RESUMEN_COLOR[producto].text}`}>
-                      {PRODUCTOS[producto]}
-                    </span>
-                    <span className="tabular-nums">
-                      {galones.toLocaleString("es-PE", { maximumFractionDigits: 1 })} gal
-                    </span>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={`h-full rounded-full ${PRODUCTO_RESUMEN_COLOR[producto].bar}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
-          <div className="mb-3 flex items-center justify-between">
-            <h3 className="font-semibold">Resumen de tanques</h3>
-            <Link href="/admin/inventario" className="text-xs font-medium text-primary hover:underline">
-              Ver inventario
-            </Link>
-          </div>
-          {tanques.length === 0 ? (
-            <p className="rounded-xl border border-dashed bg-muted/30 p-4 text-sm text-muted-foreground">
-              Todavia no hay mediciones registradas.
-            </p>
-          ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {PRODUCTOS_IDS_RESUMEN.map((producto) => {
-                const registro = tanques.find((t) => t.producto === producto);
-                if (!registro) return null;
-                const vendidos = galonesHoy.find((g) => g.producto === producto)?.galones ?? 0;
-                const actual = Math.max(0, registro.nivelMedido - vendidos);
-                const pct = Math.min(100, Math.round((actual / registro.capacidadMax) * 100));
-                return (
-                  <div key={producto} className="rounded-xl border bg-muted/20 p-3">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className={`text-sm font-bold ${PRODUCTO_RESUMEN_COLOR[producto].text}`}>
-                        {PRODUCTOS[producto]}
-                      </span>
-                      <span className="text-xs font-semibold tabular-nums">{pct}%</span>
-                    </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-background">
-                      <div
-                        className={`h-full rounded-full ${PRODUCTO_RESUMEN_COLOR[producto].bar}`}
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span>{actual.toLocaleString("es-PE", { maximumFractionDigits: 0 })} gal</span>
-                      <span>max {registro.capacidadMax.toLocaleString("es-PE")} gal</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function KpiCard({
-  icon,
-  label,
-  valor,
-  pie,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  valor: string;
-  pie?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl border border-border/60 bg-card p-3 shadow-sm">
-      <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-        <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          {icon}
-        </span>
-        {label}
-      </div>
-      <div className="mt-1.5 text-2xl font-extrabold tabular-nums">{valor}</div>
-      <div className="mt-0.5 text-[11px]">{pie}</div>
-    </div>
-  );
-}

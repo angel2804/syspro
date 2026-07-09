@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { normalizarCliente } from "@/lib/clientes";
+import { normalizarCliente } from "@/lib/clientes-autocompletado";
 
 export type ColTipo = "text" | "number" | "select";
 

@@ -37,7 +37,7 @@ import { logoutSupabase } from "@/lib/data/auth";
 import { guardarSesionPendiente, limpiarSesionPendiente } from "@/lib/offline-sesion";
 import { calcularCuadre, preciosDe, soles } from "@/lib/calc";
 import { contarPorSeveridad, puedeCerrar, validarCierre } from "@/lib/domain/cierre";
-import { clientesOrdenados } from "@/lib/clientes";
+import { clientesOrdenados } from "@/lib/clientes-autocompletado";
 import type {
   Adelanto,
   Balon,

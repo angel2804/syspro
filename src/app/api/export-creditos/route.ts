@@ -40,10 +40,12 @@ interface ExportCreditosBody {
   rango?: { desde?: string; hasta?: string };
   // Export de TODOS los clientes (una hoja/sección por cliente):
   clientes?: SeccionCliente[];
+  // Nombre del grifo cliente, para el encabezado del documento (fallback "Tanko").
+  empresa?: string;
 }
 
 const TEMPLATE_PATH = () =>
-  path.join(process.cwd(), "src/server/templates/creditos.xlsx");
+  path.join(process.cwd(), "src/lib/server/templates/creditos.xlsx");
 
 const soles = (n: number) => `S/ ${(n || 0).toFixed(2)}`;
 const fechaNombre = () => new Date().toISOString().slice(0, 10);
@@ -203,11 +205,11 @@ class PdfDoc {
   }
 }
 
-function dibujarEncabezadoDoc(d: PdfDoc, titulo: string, subtitulo?: string) {
+function dibujarEncabezadoDoc(d: PdfDoc, titulo: string, empresa: string, subtitulo?: string) {
   // Banda superior de marca
   d.rect(0, PAGE_H - 70, PAGE_W, 70, COL.marca);
   d.rect(0, PAGE_H - 74, PAGE_W, 4, COL.marcaOsc);
-  d.texto(MARGIN, PAGE_H - 40, "Tanko", 20, COL.blanco, true);
+  d.texto(MARGIN, PAGE_H - 40, empresa, 20, COL.blanco, true);
   d.texto(MARGIN, PAGE_H - 58, titulo, 11, COL.blanco);
   const hoy = new Date().toLocaleString("es-PE", { dateStyle: "short", timeStyle: "short" });
   d.textoDer(PAGE_W - MARGIN, PAGE_H - 40, "Generado", 8, COL.blanco);
@@ -281,12 +283,18 @@ function celdaTexto(f: FilaCreditoExport, c: ColDef): string {
 
 const FILA_H = 16;
 
-function dibujarSeccion(d: PdfDoc, sec: SeccionCliente, indiceGlobal: { paginas: number }) {
+function dibujarSeccion(
+  d: PdfDoc,
+  sec: SeccionCliente,
+  indiceGlobal: { paginas: number },
+  empresa: string
+) {
   d.nuevaPagina();
   indiceGlobal.paginas++;
   dibujarEncabezadoDoc(
     d,
     "Estado de cuenta por cliente",
+    empresa,
     sec.rango?.desde || sec.rango?.hasta
       ? `Periodo: ${sec.rango?.desde || "inicio"} a ${sec.rango?.hasta || "hoy"}`
       : undefined
@@ -355,10 +363,10 @@ function dibujarSeccion(d: PdfDoc, sec: SeccionCliente, indiceGlobal: { paginas:
   d.y = top - h;
 }
 
-function generarPDF(secciones: SeccionCliente[]): Buffer {
+function generarPDF(secciones: SeccionCliente[], empresa: string): Buffer {
   const d = new PdfDoc();
   const idx = { paginas: 0 };
-  for (const sec of secciones) dibujarSeccion(d, sec, idx);
+  for (const sec of secciones) dibujarSeccion(d, sec, idx, empresa);
 
   const contenidos = d.paginasFinales();
 
@@ -367,7 +375,7 @@ function generarPDF(secciones: SeccionCliente[]): Buffer {
   const conPie = contenidos.map((c, i) => {
     let pie = "";
     pie += `${COL.suave[0]} ${COL.suave[1]} ${COL.suave[2]} rg\n`;
-    pie += `BT /F1 8 Tf ${MARGIN} 26 Td (${pdfEscape(`Tanko · Créditos por cliente`)}) Tj ET\n`;
+    pie += `BT /F1 8 Tf ${MARGIN} 26 Td (${pdfEscape(`${empresa} · Créditos por cliente`)}) Tj ET\n`;
     const num = `Página ${i + 1} de ${total}`;
     pie += `BT /F1 8 Tf ${PAGE_W - MARGIN - anchoTexto(num, 8)} 26 Td (${pdfEscape(num)}) Tj ET\n`;
     pie += `${COL.linea[0]} ${COL.linea[1]} ${COL.linea[2]} RG\n0.6 w ${MARGIN} 38 m ${PAGE_W - MARGIN} 38 l S\n`;
@@ -494,10 +502,10 @@ function llenarHojaCliente(ws: ExcelJS.Worksheet, sec: SeccionCliente, startRow:
 
 // Export de TODOS los clientes: una hoja por cliente, con el nombre del cliente
 // como nombre de pestaña, replicando el estilo de la plantilla.
-async function generarExcelTodos(secciones: SeccionCliente[]) {
+async function generarExcelTodos(secciones: SeccionCliente[], empresa: string) {
   const { estilo } = await cargarPlantilla();
   const out = new ExcelJS.Workbook();
-  out.creator = "Tanko";
+  out.creator = empresa;
   const usados = new Set<string>();
   const CABECERAS = ["FECHA", "CLIENTE", "PRODUCTO", "VALE", "PRECIO", "TOTAL CREDITO", "PAGOS", "DEUDA PENDIENTE"];
 
@@ -539,13 +547,14 @@ export async function POST(req: NextRequest) {
     }
     const data = (await req.json()) as ExportCreditosBody;
     const secciones = seccionesDe(data);
+    const empresa = data.empresa?.trim() || "Tanko";
     const esTodos = !!(data.clientes && data.clientes.length);
     const ext = data.formato === "pdf" ? "pdf" : "xlsx";
     const base = esTodos ? "creditos-todos-los-clientes" : `creditos-${secciones[0]?.cliente ?? "cliente"}`;
     const filename = nombreArchivo(base, ext);
 
     if (data.formato === "pdf") {
-      const pdf = generarPDF(secciones);
+      const pdf = generarPDF(secciones, empresa);
       return new Response(new Uint8Array(pdf), {
         headers: {
           "Content-Type": "application/pdf",
@@ -555,7 +564,7 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = esTodos
-      ? await generarExcelTodos(secciones)
+      ? await generarExcelTodos(secciones, empresa)
       : await generarExcelUnCliente(secciones[0]);
     return new Response(new Uint8Array(buffer), {
       headers: {

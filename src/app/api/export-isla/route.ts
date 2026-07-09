@@ -3,7 +3,7 @@ import ExcelJS from "exceljs";
 import path from "path";
 import { calcularCuadre } from "@/lib/calc";
 import { ISLAS } from "@/lib/config";
-import { llenarHojaIsla } from "@/server/reportes";
+import { llenarHojaIsla } from "@/lib/server/reportes";
 import type { Precios, Sesion } from "@/lib/types";
 import { requirePermisoDeRequest } from "@/lib/server/supabase-admin";
 
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
     const templatePath = path.join(
       process.cwd(),
-      "src/server/templates/plantilla-isla.xlsx"
+      "src/lib/server/templates/plantilla-isla.xlsx"
     );
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.readFile(templatePath);

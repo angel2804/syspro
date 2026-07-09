@@ -7,16 +7,16 @@ import {
   llenarHojaMadre,
   llenarHojaOdometros,
   TURNO_NOMBRE,
-} from "@/server/reportes";
+} from "@/lib/server/reportes";
 import type { Precios, Sesion } from "@/lib/types";
 import { requirePermisoDeRequest } from "@/lib/server/supabase-admin";
 
 const MADRE_PATH = () =>
-  path.join(process.cwd(), "src/server/templates/madre.xlsx");
+  path.join(process.cwd(), "src/lib/server/templates/madre.xlsx");
 const ISLA_PATH = () =>
-  path.join(process.cwd(), "src/server/templates/plantilla-isla.xlsx");
+  path.join(process.cwd(), "src/lib/server/templates/plantilla-isla.xlsx");
 const ODOMETROS_PATH = () =>
-  path.join(process.cwd(), "src/server/templates/odometros.xlsx");
+  path.join(process.cwd(), "src/lib/server/templates/odometros.xlsx");
 
 // Copia una hoja ya llena (de otro libro) al libro destino. El setter de
 // `model` no reaplica los rangos combinados (mergeCells), así que se reponen.

@@ -441,7 +441,8 @@ export function construirCSVReporte(
   dia: string,
   turno: "general" | TurnoId,
   islaId: string, // "todas" o id de isla
-  precios: Precios
+  precios: Precios,
+  empresa = "Tanko"
 ): string {
   const islas = islaId === "todas" ? ISLAS : ISLAS.filter((i) => i.id === islaId);
   const filtradas = delDia.filter(
@@ -452,7 +453,7 @@ export function construirCSVReporte(
   const rep = calcularReporteDia(filtradas, dia, precios);
   const rows: (string | number)[][] = [];
 
-  rows.push(["Reporte Tanko"]);
+  rows.push([`Reporte ${empresa}`]);
   rows.push(["Día", dia]);
   rows.push(["Turno", turno === "general" ? "General (todo el día)" : turno]);
   rows.push(["Isla", islaId === "todas" ? "Todas" : (getIsla(islaId)?.nombre ?? islaId)]);

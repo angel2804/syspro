@@ -10,7 +10,7 @@
 //   tabla `config`:   key text pk, value jsonb  ('precios' | 'trabajadores')
 import { getSupabase } from "./supabase";
 import { diaMenos, diaOperativo, diaOperativoActual, turnoCompleto } from "./calc";
-import { aprenderClientes } from "./clientes";
+import { aprenderClientes } from "./clientes-autocompletado";
 import type { Admin, Precios, Sesion, TurnoId } from "./types";
 
 export const dbHabilitado = () => getSupabase() != null;
@@ -247,33 +247,31 @@ export const setClientesRemoto = (nombres: string[]) =>
 export const setClientesDescuentoRemoto = (nombres: string[]) =>
   setConfig("clientes_descuento", { nombres });
 
-// Agrega nombres a la lista remota de forma ADITIVA (lee, mezcla, escribe).
+// Agrega nombres a una lista remota de forma ADITIVA (lee, mezcla, escribe).
 // Nunca pisa la lista completa, así un cliente que el admin eliminó NO se
 // resucita cuando otro dispositivo (con su caché viejo) sube su lista. Solo
 // los nombres realmente nuevos llegan a Supabase.
-export async function addClientesRemoto(nombres: string[]): Promise<void> {
+async function addNombresRemoto(key: string, nombres: string[]): Promise<void> {
   const sb = getSupabase();
   if (!sb) return;
-  const actual = (await getConfig<{ nombres: string[] }>("clientes"))?.nombres ?? [];
+  const actual = (await getConfig<{ nombres: string[] }>(key))?.nombres ?? [];
   const merged = aprenderClientes(actual, nombres);
   if (merged === actual) return; // ninguno era nuevo
-  await setConfig("clientes", { nombres: merged });
+  await setConfig(key, { nombres: merged });
 }
-export async function addClientesDescuentoRemoto(nombres: string[]): Promise<void> {
-  const sb = getSupabase();
-  if (!sb) return;
-  const actual =
-    (await getConfig<{ nombres: string[] }>("clientes_descuento"))?.nombres ?? [];
-  const merged = aprenderClientes(actual, nombres);
-  if (merged === actual) return;
-  await setConfig("clientes_descuento", { nombres: merged });
-}
+export const addClientesRemoto = (nombres: string[]) =>
+  addNombresRemoto("clientes", nombres);
+export const addClientesDescuentoRemoto = (nombres: string[]) =>
+  addNombresRemoto("clientes_descuento", nombres);
 // Administradores (nombre + contraseña), gestionados por el desarrollador.
 export const setAdminsRemoto = (admins: Admin[]) =>
   setConfig("admins", { admins });
 // Logo de la empresa (data URL); null = volver al ícono por defecto.
 export const setLogoRemoto = (dataUrl: string | null) =>
   setConfig("logo", { dataUrl });
+// Datos del grifo cliente (nombre que aparece en sus reportes/PDFs), separado
+// del nombre del sistema (Tanko, marca fija del software).
+export const setGrifoRemoto = (nombre: string) => setConfig("grifo", { nombre });
 
 // ===== Backups (copias de seguridad) =====
 // Cada backup es una instantánea de las sesiones RECIENTES + la config en un
