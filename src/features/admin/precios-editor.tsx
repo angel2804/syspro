@@ -76,6 +76,7 @@ function PrecioInput({
 export function PreciosEditor({
   precios,
   onChange,
+  onApplyActive,
   puedeVerHistorial,
 }: {
   precios: Precios;
@@ -84,6 +85,7 @@ export function PreciosEditor({
     v: number,
     opts?: { motivo?: string; aplica?: "proximo" | "activo" }
   ) => void;
+  onApplyActive?: () => void;
   puedeVerHistorial?: boolean;
 }) {
   const combustibles: PrecioKey[] = ["bio", "regular", "premium", "glp"];
@@ -148,6 +150,17 @@ export function PreciosEditor({
               Aplicar ya
             </Button>
           </div>
+          {aplica === "activo" && onApplyActive && (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="h-8 w-full text-xs"
+              onClick={onApplyActive}
+            >
+              Aplicar precios actuales a turnos abiertos
+            </Button>
+          )}
         </div>
         <div className="space-y-3">
           <div>

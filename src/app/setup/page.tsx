@@ -162,6 +162,7 @@ export default function SetupPage() {
       trabajador: nombre,
       nombre,
       permisos: [],
+      auditoriaActiva: auth.auditoriaActiva ?? true,
       userId: auth.userId,
     });
   }

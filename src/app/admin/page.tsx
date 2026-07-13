@@ -410,31 +410,51 @@ export default function AdminPage() {
       });
     }, 2500);
   }
+  function aplicarPrecioATurnosActivos(k: PrecioKey, v: number): number {
+    const ahora = Date.now();
+    const afectadas = remoteList
+      .filter((s) => !s.cerrada && sesionUsaPrecio(s, k))
+      .map((s) => ({
+        ...s,
+        precios: { ...s.precios, [k]: v },
+        updatedAt: ahora,
+      }));
+    if (afectadas.length) {
+      const porId = new Map(afectadas.map((s) => [s.id, s]));
+      setRemoteList((prev) => prev.map((s) => porId.get(s.id) ?? s));
+      Promise.all(afectadas.map((s) => upsertSesion(s).catch(() => {}))).catch(
+        () => {}
+      );
+    }
+    return afectadas.length;
+  }
+
+  function aplicarPreciosActualesATurnosActivos() {
+    let total = 0;
+    (Object.keys(precios) as PrecioKey[]).forEach((k) => {
+      total += aplicarPrecioATurnosActivos(k, precios[k] ?? 0);
+    });
+    toast.success(
+      total > 0
+        ? `Precios aplicados en ${total} turno${total === 1 ? "" : "s"} abierto${total === 1 ? "" : "s"}`
+        : "No hay turnos abiertos afectados"
+    );
+  }
+
   function onChangePrecio(
     k: PrecioKey,
     v: number,
     opts?: { motivo?: string; aplica?: "proximo" | "activo" }
   ) {
     const anterior = precios[k] ?? null;
-    if (v === anterior) return; // sin cambio real: no tocar historial
+    if (v === anterior) {
+      if ((opts?.aplica ?? "proximo") === "activo") aplicarPrecioATurnosActivos(k, v);
+      return; // sin cambio real: no tocar historial
+    }
     setPrecio(k, v);
     setPreciosRemoto({ ...precios, [k]: v }).catch(() => {});
     if ((opts?.aplica ?? "proximo") === "activo") {
-      const ahora = Date.now();
-      const afectadas = remoteList
-        .filter((s) => !s.cerrada && sesionUsaPrecio(s, k))
-        .map((s) => ({
-          ...s,
-          precios: { ...s.precios, [k]: v },
-          updatedAt: ahora,
-        }));
-      if (afectadas.length) {
-        const porId = new Map(afectadas.map((s) => [s.id, s]));
-        setRemoteList((prev) => prev.map((s) => porId.get(s.id) ?? s));
-        Promise.all(afectadas.map((s) => upsertSesion(s).catch(() => {}))).catch(
-          () => {}
-        );
-      }
+      aplicarPrecioATurnosActivos(k, v);
     }
     // Historial de precios (Fase 5): cada cambio queda con quién/cuándo/por qué.
     // Si `aplica: 'activo'`, los turnos abiertos afectados reciben el nuevo
@@ -1041,6 +1061,7 @@ export default function AdminPage() {
           <PreciosEditor
             precios={precios}
             onChange={onChangePrecio}
+            onApplyActive={aplicarPreciosActualesATurnosActivos}
             puedeVerHistorial={auth?.permisos?.includes("precios-historial")}
           />
           <ThemeToggle />

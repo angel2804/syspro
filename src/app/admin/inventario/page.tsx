@@ -272,9 +272,9 @@ export default function InventarioTanquesPage() {
   }, [capacidades, registros]);
 
   const recargasDesdeMedicion = useCallback(
-    (p: ProductoId, fechaMedicion: string) =>
+    (p: ProductoId, medicion: TanqueRegistro) =>
       recargas
-        .filter((r) => r.producto === p && r.fechaRecarga >= fechaMedicion)
+        .filter((r) => r.producto === p && r.createdAt > medicion.createdAt)
         .reduce((a, r) => a + r.galones, 0),
     [recargas]
   );
@@ -283,7 +283,7 @@ export default function InventarioTanquesPage() {
     (p: ProductoId) => {
       const r = registros.find((x) => x.producto === p);
       if (!r) return null;
-      const recargado = recargasDesdeMedicion(p, r.fechaMedicion);
+      const recargado = recargasDesdeMedicion(p, r);
       const capacidadMax = capacidadPorProducto[p];
       const estimado = Math.max(0, Math.min(capacidadMax, r.nivelMedido + recargado - galonesHoy[p]));
       return { ...r, capacidadMax, recargado, estimado };

@@ -279,6 +279,57 @@ export async function ajustarPrecioCredito(
 }
 
 // Anula un crédito (estado='anulado'); deja auditoría. No se borra.
+export async function ajustarPrecioCreditosMasivo(input: {
+  clienteIds: string[];
+  producto: ProductoId;
+  precio: number | null;
+  desde?: number;
+  hasta?: number;
+  todo?: boolean;
+  actorNombre?: string;
+}): Promise<number> {
+  const sb = getSupabase();
+  if (!sb) throw new Error("Sin conexión a la base de datos");
+  if (input.clienteIds.length === 0) throw new Error("Selecciona un cliente");
+  if (input.precio != null && !(input.precio >= 0)) throw new Error("El precio no puede ser negativo");
+  if (!input.todo && (input.desde == null || input.hasta == null)) {
+    throw new Error("Elige un rango de fechas o marca cambiar todo");
+  }
+  if (!input.todo && input.desde! > input.hasta!) {
+    throw new Error("La fecha inicial no puede ser mayor que la final");
+  }
+
+  let q = sb
+    .from("creditos")
+    .update({ precio_ajustado: input.precio })
+    .in("cliente_id", input.clienteIds)
+    .eq("producto", input.producto)
+    .eq("estado", "activo")
+    .select("id");
+  if (!input.todo) q = q.gte("fecha", input.desde!).lte("fecha", input.hasta!);
+  const { data, error } = await q;
+  if (error) throw error;
+  const cantidad = data?.length ?? 0;
+  await registrarAuditoria({
+    accion: "precio_creditos_masivo",
+    entidad: "creditos",
+    entidadId: input.clienteIds[0],
+    actorNombre: input.actorNombre,
+    detalle: {
+      mensaje: input.todo
+        ? "Cambió el precio de todos los créditos del producto seleccionado"
+        : "Cambió el precio de créditos dentro del rango de fechas",
+      producto: input.producto,
+      precio_ajustado: input.precio,
+      desde: input.todo ? null : input.desde,
+      hasta: input.todo ? null : input.hasta,
+      clientes: input.clienteIds.length,
+      creditos_actualizados: cantidad,
+    },
+  });
+  return cantidad;
+}
+
 export async function anularCredito(id: string, actorNombre?: string, motivo?: string): Promise<void> {
   const sb = getSupabase();
   if (!sb) throw new Error("Sin conexión a la base de datos");

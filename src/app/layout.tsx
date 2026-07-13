@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { SupabaseSync } from "@/components/supabase-sync";
 import { AuthProvider } from "@/components/auth-provider";
 import { PWA } from "@/components/pwa";
+import { UpdateNotice } from "@/components/update-notice";
 
 const geistSans = Geist({
   variable: "--font-sans",
@@ -56,6 +57,7 @@ export default function RootLayout({
         <AuthProvider />
         <SupabaseSync />
         <PWA />
+        <UpdateNotice />
         <Toaster richColors position="top-center" />
       </body>
     </html>

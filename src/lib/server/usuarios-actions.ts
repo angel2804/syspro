@@ -16,6 +16,7 @@ export interface UsuarioAdmin {
   rol: Rol;
   permisos: Permiso[];
   activo: boolean;
+  auditoriaActiva: boolean;
 }
 
 type RolStaff = Extract<Rol, "dueno" | "admin" | "encargado">;
@@ -47,7 +48,7 @@ export async function listarUsuarios(token: string): Promise<UsuarioAdmin[]> {
   const sb = getAdmin();
   const { data, error } = await sb
     .from("profiles")
-    .select("id, nombre, rol, permisos, activo")
+    .select("*")
     .in("rol", ROLES_STAFF)
     .order("rol");
   if (error) throw new Error(error.message);
@@ -59,6 +60,7 @@ export async function listarUsuarios(token: string): Promise<UsuarioAdmin[]> {
     rol: p.rol as Rol,
     permisos: ((p.permisos ?? []) as Permiso[]),
     activo: p.activo as boolean,
+    auditoriaActiva: (p.auditoria_activa as boolean | null | undefined) ?? true,
   }));
 }
 
@@ -68,6 +70,7 @@ export interface NuevoUsuario {
   nombre: string;
   rol: RolStaff;
   permisos: Permiso[];
+  auditoriaActiva?: boolean;
 }
 
 export async function crearUsuario(token: string, u: NuevoUsuario): Promise<void> {
@@ -90,6 +93,7 @@ export async function crearUsuario(token: string, u: NuevoUsuario): Promise<void
     rol: u.rol,
     permisos,
     activo: true,
+    auditoria_activa: u.auditoriaActiva ?? true,
   });
   if (perr) {
     // Rollback del usuario de Auth si el perfil falla, para no dejar huérfanos.
@@ -100,8 +104,9 @@ export async function crearUsuario(token: string, u: NuevoUsuario): Promise<void
     accion: "usuario_creado",
     entidad: "profiles",
     entidadId: data.user.id,
+    actorId: actor.id,
     actorNombre: actor.nombre,
-    detalle: { email: u.email, rol: u.rol },
+    detalle: { email: u.email, rol: u.rol, auditoria_activa: u.auditoriaActiva ?? true },
   });
 }
 
@@ -110,6 +115,7 @@ export interface CambiosUsuario {
   rol?: RolStaff;
   permisos?: Permiso[];
   activo?: boolean;
+  auditoriaActiva?: boolean;
 }
 
 export async function actualizarUsuario(
@@ -151,6 +157,7 @@ export async function actualizarUsuario(
   }
   if (cambios.permisos !== undefined && cambios.rol !== "dueno") patch.permisos = cambios.permisos;
   if (cambios.activo !== undefined) patch.activo = cambios.activo;
+  if (cambios.auditoriaActiva !== undefined) patch.auditoria_activa = cambios.auditoriaActiva;
   if (Object.keys(patch).length === 0) return;
 
   const { error } = await sb.from("profiles").update(patch).eq("id", id);
@@ -159,6 +166,7 @@ export async function actualizarUsuario(
     accion: "usuario_editado",
     entidad: "profiles",
     entidadId: id,
+    actorId: actor.id,
     actorNombre: actor.nombre,
     detalle: patch,
   });
@@ -180,6 +188,7 @@ export async function resetearPassword(
     accion: "usuario_password",
     entidad: "profiles",
     entidadId: id,
+    actorId: actor.id,
     actorNombre: actor.nombre,
     detalle: {},
   });
@@ -212,6 +221,7 @@ export async function resetearPasswordTrabajador(
     accion: "usuario_password",
     entidad: "profiles",
     entidadId: id,
+    actorId: actor.id,
     actorNombre: actor.nombre,
     detalle: { cuenta: "trabajador" },
   });
@@ -254,6 +264,7 @@ export async function crearDuenoInicial(d: DuenoInicial): Promise<void> {
     accion: "dueno_inicial",
     entidad: "profiles",
     entidadId: data.user.id,
+    actorId: data.user.id,
     actorNombre: d.nombre,
     detalle: { email: d.email },
   });

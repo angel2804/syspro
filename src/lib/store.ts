@@ -22,6 +22,7 @@ import type {
 } from "./types";
 import { getIsla, PERMISOS_TODOS, PRECIOS_DEFAULT, TRABAJADORES_DEFAULT } from "./config";
 import { aprenderClientes } from "./clientes-autocompletado";
+import { registrarAuditoria } from "./data/auditoria";
 import {
   diaActivoParaNuevosTurnos,
   diaOperativo,
@@ -46,6 +47,7 @@ interface AuthState {
   trabajador: string; // nombre operativo, vacío para staff
   nombre: string; // nombre a mostrar del usuario autenticado
   permisos: Permiso[]; // permisos efectivos (el dueño trae todos)
+  auditoriaActiva?: boolean;
   userId?: string; // auth.uid() de Supabase (Fase 4)
   // Compat: id del admin de la lista legacy (contraseña en config). `null` =
   // contraseña maestra. En la Fase 4 el rol/permisos vienen de `profiles`.
@@ -202,6 +204,27 @@ function mutateCurrent(
   }));
 }
 
+function auditTurno(get: () => StoreState, detalle: Record<string, unknown>) {
+  const st = get();
+  const s = st.currentSesionId
+    ? st.sesiones.find((x) => x.id === st.currentSesionId)
+    : undefined;
+  const actor = st.auth?.trabajador || st.auth?.nombre || s?.trabajador || "Sistema";
+  registrarAuditoria({
+    accion: "registro_turno",
+    entidad: "sesiones",
+    entidadId: s?.id,
+    actorNombre: actor,
+    detalle: {
+      trabajador: s?.trabajador ?? st.auth?.trabajador ?? null,
+      turno: s?.turno ?? null,
+      isla: s?.islaId ?? null,
+      dia: s?.diaOperativo ?? s?.fecha ?? null,
+      ...detalle,
+    },
+  }).catch(() => {});
+}
+
 export const useStore = create<StoreState>()(
   persist(
     (set, get) => ({
@@ -248,12 +271,13 @@ export const useStore = create<StoreState>()(
             trabajador: "",
             nombre: "Administrador",
             permisos: [...PERMISOS_TODOS],
+            auditoriaActiva: true,
             adminId,
           },
         }),
       loginTrabajador: (nombre) =>
         set({
-          auth: { rol: "trabajador", trabajador: nombre, nombre, permisos: [] },
+          auth: { rol: "trabajador", trabajador: nombre, nombre, permisos: [], auditoriaActiva: true },
         }),
       setAuth: (a) => set({ auth: a }),
       logout: () => set({ auth: null, currentSesionId: null }),
@@ -348,48 +372,80 @@ export const useStore = create<StoreState>()(
       getCurrentSesion: () =>
         get().sesiones.find((s) => s.id === get().currentSesionId),
 
-      setOdometro: (mangueraId, valor) =>
+      setOdometro: (mangueraId, valor) => {
+        auditTurno(get, {
+          mensaje: "Cambió el odómetro del turno",
+          campo: valor.entrada !== undefined ? "odómetro de inicio" : "odómetro de cierre",
+          mangueraId,
+          valor,
+        });
         mutateCurrent(set, get, (s) => ({
           ...s,
           odometros: {
             ...s.odometros,
             [mangueraId]: { ...s.odometros[mangueraId], ...valor },
           },
-        })),
+        }));
+      },
 
-      addPago: (p) =>
+      addPago: (p) => {
+        auditTurno(get, {
+          mensaje: p.metodo === "yape" ? "Agregó un Yape al turno" : "Agregó un pago electrónico al turno",
+          metodo: p.metodo,
+          monto: p.monto,
+        });
         mutateCurrent(set, get, (s) => ({
           ...s,
           pagos: [...s.pagos, { ...p, id: uid() }],
-        })),
-      updatePago: (id, p) =>
+        }));
+      },
+      updatePago: (id, p) => {
+        auditTurno(get, {
+          mensaje: "Editó un pago electrónico del turno",
+          pagoId: id,
+          cambios: p,
+        });
         mutateCurrent(set, get, (s) => ({
           ...s,
           pagos: s.pagos.map((x) => (x.id === id ? { ...x, ...p } : x)),
-        })),
-      removePago: (id) =>
+        }));
+      },
+      removePago: (id) => {
+        auditTurno(get, { mensaje: "Eliminó un pago electrónico del turno", pagoId: id });
         mutateCurrent(set, get, (s) => ({
           ...s,
           pagos: s.pagos.filter((x) => x.id !== id),
-        })),
+        }));
+      },
 
       addCredito: (c) => {
+        auditTurno(get, {
+          mensaje: "Agregó un crédito al turno",
+          cliente: c.cliente,
+          producto: c.producto,
+          galones: c.galones,
+          vale: c.vale,
+        });
         get().aprenderClientes([c.cliente]);
         mutateCurrent(set, get, (s) => ({
           ...s,
           creditos: [...s.creditos, { ...c, id: uid() }],
         }));
       },
-      updateCredito: (id, c) =>
+      updateCredito: (id, c) => {
+        auditTurno(get, { mensaje: "Editó un crédito del turno", creditoId: id, cambios: c });
         mutateCurrent(set, get, (s) => ({
           ...s,
           creditos: s.creditos.map((x) => (x.id === id ? { ...x, ...c } : x)),
-        })),
-      removeCredito: (id) =>
+        }));
+      },
+      removeCredito: (id) => {
+        auditTurno(get, { mensaje: "Eliminó un crédito del turno", creditoId: id });
         mutateCurrent(set, get, (s) => ({
           ...s,
           creditos: s.creditos.filter((x) => x.id !== id),
-        })),
+        }));
+      },
 
       addPromocion: (p) =>
         mutateCurrent(set, get, (s) => ({
@@ -410,24 +466,35 @@ export const useStore = create<StoreState>()(
         })),
 
       addDescuento: (d) => {
+        auditTurno(get, {
+          mensaje: "Agregó un descuento al turno",
+          cliente: d.cliente,
+          producto: d.producto,
+          galones: d.galones,
+          precioDescuento: d.precioDescuento,
+        });
         get().aprenderClientesDescuento([d.cliente]);
         mutateCurrent(set, get, (s) => ({
           ...s,
           descuentos: [...s.descuentos, { ...d, id: uid() }],
         }));
       },
-      updateDescuento: (id, d) =>
+      updateDescuento: (id, d) => {
+        auditTurno(get, { mensaje: "Editó un descuento del turno", descuentoId: id, cambios: d });
         mutateCurrent(set, get, (s) => ({
           ...s,
           descuentos: s.descuentos.map((x) =>
             x.id === id ? { ...x, ...d } : x
           ),
-        })),
-      removeDescuento: (id) =>
+        }));
+      },
+      removeDescuento: (id) => {
+        auditTurno(get, { mensaje: "Eliminó un descuento del turno", descuentoId: id });
         mutateCurrent(set, get, (s) => ({
           ...s,
           descuentos: s.descuentos.filter((x) => x.id !== id),
-        })),
+        }));
+      },
 
       addGasto: (g) =>
         mutateCurrent(set, get, (s) => ({
@@ -496,7 +563,21 @@ export const useStore = create<StoreState>()(
           balones: (s.balones ?? []).filter((x) => x.id !== id),
         })),
 
-      cerrarSesion: (id) =>
+      cerrarSesion: (id) => {
+        const s = get().sesiones.find((x) => x.id === id);
+        registrarAuditoria({
+          accion: "cierre_turno",
+          entidad: "sesiones",
+          entidadId: id,
+          actorNombre: s?.trabajador ?? get().auth?.nombre ?? "Sistema",
+          detalle: {
+            mensaje: "Cerró el turno y generó el reporte",
+            trabajador: s?.trabajador ?? null,
+            turno: s?.turno ?? null,
+            isla: s?.islaId ?? null,
+            dia: s?.diaOperativo ?? s?.fecha ?? null,
+          },
+        }).catch(() => {});
         set((state) => {
           const ahora = Date.now();
           const globales = state.precios;
@@ -517,7 +598,8 @@ export const useStore = create<StoreState>()(
                 : s
             ),
           };
-        }),
+        });
+      },
 
       mergeRemoteSesiones: (remotas, cutoff) =>
         set((state) => {
@@ -602,6 +684,7 @@ export const useStore = create<StoreState>()(
               : a.rol === "trabajador"
                 ? []
                 : [...PERMISOS_TODOS],
+            auditoriaActiva: a.auditoriaActiva ?? true,
             userId: a.userId,
             adminId: a.adminId,
           };

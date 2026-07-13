@@ -37,6 +37,7 @@ type FilaProfile = {
   rol: Rol;
   permisos: string[] | null;
   activo: boolean;
+  auditoria_activa?: boolean | null;
   trabajador_nombre: string | null;
 };
 
@@ -47,6 +48,7 @@ function perfilDeFila(r: FilaProfile): Perfil {
     rol: r.rol,
     permisos: r.rol === "dueno" ? [...PERMISOS_TODOS] : ((r.permisos ?? []) as Permiso[]),
     activo: r.activo,
+    auditoriaActiva: r.auditoria_activa ?? true,
     trabajadorNombre: r.trabajador_nombre ?? undefined,
   };
 }
@@ -106,6 +108,17 @@ export async function auditarServidor(r: {
   detalle?: Record<string, unknown>;
 }): Promise<void> {
   try {
+    if (r.actorId) {
+      const { data: perfil } = await getAdmin()
+        .from("profiles")
+        .select("rol, auditoria_activa")
+        .eq("id", r.actorId)
+        .maybeSingle();
+      const rol = perfil?.rol as Rol | undefined;
+      const auditoriaActiva = (perfil?.auditoria_activa as boolean | null | undefined) ?? true;
+      if (rol === "dueno") return;
+      if (rol && rol !== "trabajador" && auditoriaActiva === false) return;
+    }
     await getAdmin().from("audit_log").insert({
       accion: r.accion,
       entidad: r.entidad ?? null,

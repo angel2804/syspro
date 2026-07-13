@@ -144,6 +144,7 @@ export default function UsuariosPage() {
                 <TableHead>Correo</TableHead>
                 <TableHead>Rol</TableHead>
                 <TableHead>Permisos</TableHead>
+                <TableHead>Auditoría</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead></TableHead>
               </TableRow>
@@ -158,6 +159,13 @@ export default function UsuariosPage() {
                   </TableCell>
                   <TableCell className="tabular-nums">
                     {u.rol === "dueno" ? "Todos" : u.permisos.length}
+                  </TableCell>
+                  <TableCell>
+                    {u.rol === "dueno" || u.auditoriaActiva ? (
+                      <span className="text-emerald-600">Activa</span>
+                    ) : (
+                      <span className="text-muted-foreground">Apagada</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     {u.activo ? (
@@ -176,7 +184,7 @@ export default function UsuariosPage() {
               ))}
               {usuarios.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center text-sm text-muted-foreground">
                     Aún no hay usuarios administrativos. Crea el primero.
                   </TableCell>
                 </TableRow>
@@ -284,6 +292,7 @@ function NuevoUsuarioDialog({ onListo }: { onListo: () => Promise<void> }) {
   const [nombre, setNombre] = useState("");
   const [rol, setRol] = useState<RolStaff>("encargado");
   const [permisos, setPermisos] = useState<Permiso[]>(PERMISOS_BASE.encargado);
+  const [auditoriaActiva, setAuditoriaActiva] = useState(true);
   const [guardando, setGuardando] = useState(false);
 
   function cambiarRol(r: RolStaff) {
@@ -299,7 +308,7 @@ function NuevoUsuarioDialog({ onListo }: { onListo: () => Promise<void> }) {
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Sesión expirada.");
-      await crearUsuario(token, { email, password, nombre, rol, permisos });
+      await crearUsuario(token, { email, password, nombre, rol, permisos, auditoriaActiva });
       toast.success("Usuario creado");
       setEmail(""); setPassword(""); setNombre("");
       setOpen(false);
@@ -352,6 +361,15 @@ function NuevoUsuarioDialog({ onListo }: { onListo: () => Promise<void> }) {
             <Label className="mb-1 block">Permisos</Label>
             <PermisosSelector seleccionados={permisos} onToggle={toggle} />
           </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 accent-emerald-600"
+              checked={auditoriaActiva}
+              onChange={(e) => setAuditoriaActiva(e.target.checked)}
+            />
+            Registrar sus cambios en auditoría
+          </label>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
@@ -368,6 +386,7 @@ function EditarUsuarioDialog({ usuario, onListo }: { usuario: UsuarioAdmin; onLi
   const [rol, setRol] = useState<Rol>(usuario.rol);
   const [permisos, setPermisos] = useState<Permiso[]>(usuario.permisos);
   const [activo, setActivo] = useState(usuario.activo);
+  const [auditoriaActiva, setAuditoriaActiva] = useState(usuario.auditoriaActiva);
   const [guardando, setGuardando] = useState(false);
   const esDueno = usuario.rol === "dueno";
 
@@ -385,6 +404,7 @@ function EditarUsuarioDialog({ usuario, onListo }: { usuario: UsuarioAdmin; onLi
         rol: rol === "dueno" ? undefined : (rol as RolStaff),
         permisos: rol === "dueno" ? undefined : permisos,
         activo,
+        auditoriaActiva: rol === "dueno" ? undefined : auditoriaActiva,
       });
       toast.success("Usuario actualizado");
       setOpen(false);
@@ -436,6 +456,17 @@ function EditarUsuarioDialog({ usuario, onListo }: { usuario: UsuarioAdmin; onLi
               <Label className="mb-1 block">Permisos</Label>
               <PermisosSelector seleccionados={permisos} onToggle={toggle} />
             </div>
+          )}
+          {!esDueno && (
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="size-4 accent-emerald-600"
+                checked={auditoriaActiva}
+                onChange={(e) => setAuditoriaActiva(e.target.checked)}
+              />
+              Registrar sus cambios en auditoría
+            </label>
           )}
         </div>
         <DialogFooter>

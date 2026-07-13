@@ -45,6 +45,7 @@ export function AuthProvider() {
         trabajador: trabajadorLocal,
         nombre: perfil.rol === "trabajador" ? trabajadorLocal : perfil.nombre,
         permisos: perfil.permisos,
+        auditoriaActiva: perfil.auditoriaActiva,
         userId: perfil.id,
       });
     }

@@ -227,11 +227,81 @@ export async function renombrarCliente(
     .eq("id", clienteId);
   if (error) throw error;
   await registrarAuditoria({
-    accion: "alias_agregado",
+    accion: "cliente_editado",
     entidad: "clientes",
     entidadId: clienteId,
     actorNombre,
-    detalle: { renombrado_a: nombre },
+    detalle: { mensaje: "Cambió el nombre del cliente", nombre },
+  });
+}
+
+export async function editarCliente(
+  clienteId: string,
+  input: {
+    nombre: string;
+    documento?: string;
+    telefono?: string;
+    estado?: Cliente["estado"];
+  },
+  actorNombre?: string
+): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) throw new Error("Sin conexión a la base de datos");
+  const nombre = limpiar(input.nombre);
+  if (!nombre) throw new Error("El nombre no puede estar vacío");
+  const patch = {
+    nombre,
+    nombre_normalizado: normalizar(nombre),
+    documento: input.documento?.trim() || null,
+    telefono: input.telefono?.trim() || null,
+    estado: input.estado ?? "activo",
+  };
+  const { error } = await sb.from("clientes").update(patch).eq("id", clienteId);
+  if (error) throw error;
+  await registrarAuditoria({
+    accion: "cliente_editado",
+    entidad: "clientes",
+    entidadId: clienteId,
+    actorNombre,
+    detalle: { mensaje: "Editó los datos del cliente", ...patch },
+  });
+}
+
+export async function inactivarCliente(
+  clienteId: string,
+  actorNombre?: string
+): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) throw new Error("Sin conexión a la base de datos");
+  const { error } = await sb.from("clientes").update({ estado: "inactivo" }).eq("id", clienteId);
+  if (error) throw error;
+  await registrarAuditoria({
+    accion: "cliente_inactivado",
+    entidad: "clientes",
+    entidadId: clienteId,
+    actorNombre,
+    detalle: { mensaje: "Marcó el cliente como inactivo" },
+  });
+}
+
+export async function eliminarCliente(
+  clienteId: string,
+  nombre: string,
+  actorNombre?: string
+): Promise<void> {
+  const sb = getSupabase();
+  if (!sb) throw new Error("Sin conexión a la base de datos");
+  const { error } = await sb.from("clientes").delete().eq("id", clienteId);
+  if (error) throw error;
+  await registrarAuditoria({
+    accion: "cliente_eliminado",
+    entidad: "clientes",
+    entidadId: clienteId,
+    actorNombre,
+    detalle: {
+      mensaje: "Eliminó definitivamente el cliente y sus movimientos asociados",
+      cliente: nombre,
+    },
   });
 }
 

@@ -18,6 +18,7 @@ export interface Perfil {
   rol: Rol;
   permisos: Permiso[];
   activo: boolean;
+  auditoriaActiva: boolean;
   trabajadorNombre?: string;
 }
 
@@ -27,6 +28,7 @@ type FilaProfile = {
   rol: Rol;
   permisos: string[] | null;
   activo: boolean;
+  auditoria_activa?: boolean | null;
   trabajador_nombre: string | null;
 };
 
@@ -38,6 +40,7 @@ function perfilDeFila(r: FilaProfile): Perfil {
     // El dueño siempre tiene todos los permisos, sin depender del arreglo.
     permisos: r.rol === "dueno" ? [...PERMISOS_TODOS] : ((r.permisos ?? []) as Permiso[]),
     activo: r.activo,
+    auditoriaActiva: r.auditoria_activa ?? true,
     trabajadorNombre: r.trabajador_nombre ?? undefined,
   };
 }

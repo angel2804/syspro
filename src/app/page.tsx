@@ -194,6 +194,7 @@ export default function LoginPage() {
         trabajador: "",
         nombre: perfil.nombre,
         permisos: perfil.permisos,
+        auditoriaActiva: perfil.auditoriaActiva,
         userId: perfil.id,
       });
       toast.success(`Bienvenido, ${perfil.nombre}`);
@@ -237,6 +238,7 @@ export default function LoginPage() {
       trabajador: nombre,
       nombre,
       permisos: [],
+      auditoriaActiva: true,
       userId: trabUserId,
     });
     const activa = sesiones.find((s) => s.trabajador === nombre && !s.cerrada);

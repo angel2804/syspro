@@ -46,6 +46,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { PRODUCTOS } from "@/lib/config";
+import type { ProductoId } from "@/lib/types";
 import {
   construirEstadoCuenta,
   formatoSaldo,
@@ -65,12 +66,16 @@ import {
   setPrecioCreditoCliente,
   setGrupoCliente,
   renombrarCliente,
+  editarCliente,
+  inactivarCliente,
+  eliminarCliente,
   type Cliente,
 } from "@/lib/data/clientes";
 import {
   anularCredito,
   anularPago,
   ajustarPrecioCredito,
+  ajustarPrecioCreditosMasivo,
   estadoCuentaCliente,
   estadoCuentaGrupo,
   fetchCreditos,
@@ -310,7 +315,7 @@ export default function CreditosPage() {
     const deudaDe = (id: string) => saldoPorId.get(id)?.deudaPendiente ?? 0;
     const subsPorGrupo = new Map<string, Cliente[]>();
     for (const c of clientes) {
-      if (c.estado === "fusionado" || !c.grupoId) continue;
+      if (c.estado === "fusionado" || c.estado === "inactivo" || !c.grupoId) continue;
       const arr = subsPorGrupo.get(c.grupoId) ?? [];
       arr.push(c);
       subsPorGrupo.set(c.grupoId, arr);
@@ -322,7 +327,7 @@ export default function CreditosPage() {
 
     const items: Item[] = [];
     for (const c of clientes) {
-      if (c.estado === "fusionado" || c.grupoId) continue; // subs van dentro
+      if (c.estado === "fusionado" || c.estado === "inactivo" || c.grupoId) continue; // subs van dentro
       const subs = (subsPorGrupo.get(c.id) ?? []).sort((a, b) =>
         a.nombre.localeCompare(b.nombre, "es")
       );
@@ -575,16 +580,18 @@ function DetalleCliente({
   onCambio: () => Promise<void>;
 }) {
   const nombreGrifo = useStore((s) => s.nombreGrifo);
+  const actorNombre = useStore((s) => s.auth?.nombre ?? "Admin");
   const resumen = detalle?.resumen;
   const est = resumen ? resumen.estado : "sin-deuda";
 
   // Grupo: subs = este cliente es madre; esSub = este cliente cuelga de otra.
   const subs = clientes.filter(
-    (c) => c.grupoId === cliente.id && c.estado !== "fusionado"
+    (c) => c.grupoId === cliente.id && c.estado !== "fusionado" && c.estado !== "inactivo"
   );
   const esGrupo = subs.length > 0;
   const esSub = !!cliente.grupoId;
   const madre = esSub ? clientes.find((c) => c.id === cliente.grupoId) : undefined;
+  const clienteIdsPrecio = esGrupo ? [cliente.id, ...subs.map((s) => s.id)] : [cliente.id];
 
   // Filtro por rango de fechas para el estado de cuenta (inclusivo). Vacío = sin límite.
   const [desde, setDesde] = useState("");
@@ -669,7 +676,7 @@ function DetalleCliente({
                 size="sm"
                 onClick={async () => {
                   try {
-                    await validarCliente(cliente.id, "Admin");
+                    await validarCliente(cliente.id, actorNombre);
                     toast.success("Cliente validado");
                     await onCambio();
                   } catch (e) {
@@ -714,7 +721,19 @@ function DetalleCliente({
           />
         </div>
 
-        <ConfigCliente cliente={cliente} clientes={clientes} onCambio={onCambio} />
+        <ConfigCliente
+          cliente={cliente}
+          clientes={clientes}
+          onCambio={onCambio}
+          actorNombre={actorNombre}
+        />
+        <CambioPrecioRango
+          clienteNombre={cliente.nombre}
+          clienteIds={clienteIdsPrecio}
+          esGrupo={esGrupo}
+          actorNombre={actorNombre}
+          onCambio={onCambio}
+        />
       </div>
 
       <Tabs defaultValue="estado">
@@ -768,6 +787,7 @@ function DetalleCliente({
                         <PrecioCreditoEditable
                           creditoId={f.movimientoId}
                           precio={f.precio}
+                          actorNombre={actorNombre}
                           onCambio={onCambio}
                         />
                       ) : f.precio != null ? (
@@ -846,7 +866,7 @@ function DetalleCliente({
                         <button
                           className="text-xs text-red-600 hover:underline"
                           onClick={async () => {
-                            await anularCredito(c.id, "Admin");
+                            await anularCredito(c.id, actorNombre);
                             toast.success("Crédito anulado");
                             await onCambio();
                           }}
@@ -893,7 +913,7 @@ function DetalleCliente({
                         <button
                           className="text-xs text-red-600 hover:underline"
                           onClick={async () => {
-                            await anularPago(p.id, "Admin");
+                            await anularPago(p.id, actorNombre);
                             toast.success("Pago anulado");
                             await onCambio();
                           }}
@@ -920,10 +940,12 @@ function DetalleCliente({
 function PrecioCreditoEditable({
   creditoId,
   precio,
+  actorNombre,
   onCambio,
 }: {
   creditoId: string;
   precio: number;
+  actorNombre: string;
   onCambio: () => Promise<void>;
 }) {
   const [editando, setEditando] = useState(false);
@@ -939,7 +961,7 @@ function PrecioCreditoEditable({
     }
     setGuardando(true);
     try {
-      await ajustarPrecioCredito(creditoId, v, "Admin");
+      await ajustarPrecioCredito(creditoId, v, actorNombre);
       toast.success("Precio del crédito actualizado");
       setEditando(false);
       await onCambio();
@@ -996,15 +1018,20 @@ function ConfigCliente({
   cliente,
   clientes,
   onCambio,
+  actorNombre,
 }: {
   cliente: Cliente;
   clientes: Cliente[];
   onCambio: () => Promise<void>;
+  actorNombre: string;
 }) {
   const [editPrecio, setEditPrecio] = useState(false);
   const [precioTxt, setPrecioTxt] = useState(cliente.precioCredito?.toFixed(2) ?? "");
   const [editNombre, setEditNombre] = useState(false);
   const [nombreTxt, setNombreTxt] = useState(cliente.nombre);
+  const [editDatos, setEditDatos] = useState(false);
+  const [docTxt, setDocTxt] = useState(cliente.documento ?? "");
+  const [telTxt, setTelTxt] = useState(cliente.telefono ?? "");
 
   // Posibles madres: clientes activos distintos de este y que no sean sus subs
   // (evita ciclos). Sub-clientes tampoco pueden ser madre.
@@ -1025,7 +1052,7 @@ function ConfigCliente({
       return;
     }
     try {
-      await setPrecioCreditoCliente(cliente.id, v, "Admin");
+      await setPrecioCreditoCliente(cliente.id, v, actorNombre);
       toast.success(v == null ? "Precio especial quitado" : "Precio especial guardado");
       setEditPrecio(false);
       await onCambio();
@@ -1037,9 +1064,61 @@ function ConfigCliente({
   async function guardarNombre() {
     if (!nombreTxt.trim()) return;
     try {
-      await renombrarCliente(cliente.id, nombreTxt, "Admin");
+      await renombrarCliente(cliente.id, nombreTxt, actorNombre);
       toast.success("Cliente renombrado");
       setEditNombre(false);
+      await onCambio();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  async function guardarDatos() {
+    if (!nombreTxt.trim()) {
+      toast.error("El nombre no puede estar vacío");
+      return;
+    }
+    try {
+      await editarCliente(
+        cliente.id,
+        {
+          nombre: nombreTxt,
+          documento: docTxt,
+          telefono: telTxt,
+          estado: cliente.estado === "inactivo" ? "activo" : cliente.estado,
+        },
+        actorNombre
+      );
+      toast.success("Cliente actualizado");
+      setEditDatos(false);
+      await onCambio();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  async function marcarInactivo() {
+    if (!confirm(`¿Marcar "${cliente.nombre}" como inactivo? Dejará de aparecer en la lista.`)) return;
+    try {
+      await inactivarCliente(cliente.id, actorNombre);
+      toast.success("Cliente inactivado");
+      await onCambio();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  }
+
+  async function borrarDefinitivo() {
+    if (
+      !confirm(
+        `¿Eliminar definitivamente "${cliente.nombre}"? También se eliminarán sus créditos, pagos y alias.`
+      )
+    ) {
+      return;
+    }
+    try {
+      await eliminarCliente(cliente.id, cliente.nombre, actorNombre);
+      toast.success("Cliente eliminado");
       await onCambio();
     } catch (e) {
       toast.error((e as Error).message);
@@ -1049,7 +1128,7 @@ function ConfigCliente({
   async function cambiarGrupo(valor: string | null) {
     const destino = !valor || valor === "ninguno" ? null : valor;
     try {
-      await setGrupoCliente(cliente.id, destino, "Admin");
+      await setGrupoCliente(cliente.id, destino, actorNombre);
       toast.success(destino ? "Movido de grupo" : "Quitado del grupo");
       await onCambio();
     } catch (e) {
@@ -1158,6 +1237,162 @@ function ConfigCliente({
           </button>
         )}
       </div>
+
+      <button
+        onClick={() => {
+          setNombreTxt(cliente.nombre);
+          setDocTxt(cliente.documento ?? "");
+          setTelTxt(cliente.telefono ?? "");
+          setEditDatos((v) => !v);
+        }}
+        className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+        title="Editar datos del cliente"
+      >
+        <Pencil className="size-3" /> Editar datos
+      </button>
+      <button onClick={marcarInactivo} className="text-amber-600 hover:underline">
+        Inactivar
+      </button>
+      <button onClick={borrarDefinitivo} className="text-red-600 hover:underline">
+        Eliminar
+      </button>
+
+      {editDatos && (
+        <div className="basis-full rounded-md border bg-background p-2">
+          <div className="grid gap-2 sm:grid-cols-3">
+            <div>
+              <Label className="text-[11px]">Nombre</Label>
+              <Input className="h-8" value={nombreTxt} onChange={(e) => setNombreTxt(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-[11px]">Documento</Label>
+              <Input className="h-8" value={docTxt} onChange={(e) => setDocTxt(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-[11px]">Teléfono</Label>
+              <Input className="h-8" value={telTxt} onChange={(e) => setTelTxt(e.target.value)} />
+            </div>
+          </div>
+          <div className="mt-2 flex justify-end gap-2">
+            <Button size="sm" variant="outline" onClick={() => setEditDatos(false)}>
+              Cancelar
+            </Button>
+            <Button size="sm" onClick={guardarDatos}>
+              Guardar datos
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CambioPrecioRango({
+  clienteNombre,
+  clienteIds,
+  esGrupo,
+  actorNombre,
+  onCambio,
+}: {
+  clienteNombre: string;
+  clienteIds: string[];
+  esGrupo: boolean;
+  actorNombre: string;
+  onCambio: () => Promise<void>;
+}) {
+  const [producto, setProducto] = useState<ProductoId>("bio");
+  const [precioTxt, setPrecioTxt] = useState("");
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [todo, setTodo] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+
+  async function aplicar() {
+    const precio = Number(precioTxt);
+    if (Number.isNaN(precio) || precio < 0) {
+      toast.error("Precio inválido");
+      return;
+    }
+    if (!todo && (!desde || !hasta)) {
+      toast.error("Elige fecha inicial y final, o marca cambiar todo");
+      return;
+    }
+    setGuardando(true);
+    try {
+      const n = await ajustarPrecioCreditosMasivo({
+        clienteIds,
+        producto,
+        precio,
+        desde: todo ? undefined : inicioDia(desde),
+        hasta: todo ? undefined : finDia(hasta),
+        todo,
+        actorNombre,
+      });
+      toast.success(`Precio actualizado en ${n} crédito${n === 1 ? "" : "s"}`);
+      await onCambio();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="mt-2 rounded-md border bg-background p-3 text-xs">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <Tag className="size-4 text-muted-foreground" />
+        <span className="font-semibold">Cambiar precio por producto y fecha</span>
+        <span className="text-muted-foreground">
+          {clienteNombre}{esGrupo ? " y sus sub-clientes" : ""}
+        </span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-[150px_120px_1fr_1fr_auto] sm:items-end">
+        <div>
+          <Label className="text-[11px]">Producto</Label>
+          <Select value={producto} onValueChange={(v) => setProducto(v as ProductoId)}>
+            <SelectTrigger className="h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(["bio", "regular", "premium", "glp"] as ProductoId[]).map((p) => (
+                <SelectItem key={p} value={p}>
+                  {PRODUCTOS[p]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-[11px]">Nuevo precio</Label>
+          <Input
+            className="h-8 text-right"
+            inputMode="decimal"
+            value={precioTxt}
+            onChange={(e) => setPrecioTxt(e.target.value)}
+            placeholder="15.00"
+          />
+        </div>
+        <div>
+          <Label className="text-[11px]">Desde</Label>
+          <Input className="h-8" type="date" value={desde} disabled={todo} onChange={(e) => setDesde(e.target.value)} />
+        </div>
+        <div>
+          <Label className="text-[11px]">Hasta</Label>
+          <Input className="h-8" type="date" value={hasta} disabled={todo} onChange={(e) => setHasta(e.target.value)} />
+        </div>
+        <Button size="sm" className="h-8" disabled={guardando} onClick={aplicar}>
+          Aplicar
+        </Button>
+      </div>
+      <label className="mt-2 flex items-center gap-2 text-xs">
+        <input
+          type="checkbox"
+          className="size-4 accent-emerald-600"
+          checked={todo}
+          onChange={(e) => setTodo(e.target.checked)}
+        />
+        Cambiar todo el historial activo de este producto
+      </label>
     </div>
   );
 }
