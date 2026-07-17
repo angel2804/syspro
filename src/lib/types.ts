@@ -52,6 +52,7 @@ export type Permiso =
   | "backups-generar" // generar backups
   | "config" // ver configuraciones
   | "config-datos" // cambiar logo/datos del grifo
+  | "corregir-trabajador-turno" // corregir solo el nombre del trabajador en un turno
   | "inventario" // ver inventario de tanques (referencia visual)
   | "reset"; // resetear sistema
 

@@ -125,10 +125,15 @@ export async function fetchUltimosRegistrosTanques(): Promise<TanqueRegistro[]> 
     .limit(200);
   if (error) throw error;
   const filas = (data ?? []).map((r) => registroDeFila(r as FilaTanqueRegistro));
+  const capacidades = await fetchCapacidadesTanques().catch(() => []);
   // Un solo registro (el más reciente) por producto.
   const porProducto = new Map<ProductoId, TanqueRegistro>();
   for (const f of filas) if (!porProducto.has(f.producto)) porProducto.set(f.producto, f);
-  return Array.from(porProducto.values());
+  return Array.from(porProducto.values()).map((r) => ({
+    ...r,
+    capacidadMax:
+      capacidades.find((c) => c.producto === r.producto)?.capacidadMax ?? r.capacidadMax,
+  }));
 }
 
 // Historial completo (más reciente primero), opcionalmente filtrado.

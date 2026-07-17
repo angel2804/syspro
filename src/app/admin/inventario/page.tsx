@@ -8,7 +8,7 @@
 import { type CSSProperties, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { ArrowLeft, Droplet, Fuel, Save, Settings } from "lucide-react";
+import { ArrowLeft, Download, Droplet, Fuel, Save, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,7 +25,13 @@ import { usePermisoGuard } from "@/lib/use-permiso-guard";
 import { PRODUCTOS } from "@/lib/config";
 import type { ProductoId, Sesion } from "@/lib/types";
 import { fetchSesionesDesde } from "@/lib/db";
-import { calcularReporteDia, diaMenos, diaOperativo, diaOperativoActual } from "@/lib/calc";
+import {
+  calcularReporteDia,
+  diaMenos,
+  diaOperativo,
+  diaOperativoActual,
+  galonesPorProducto,
+} from "@/lib/calc";
 import { useStore } from "@/lib/store";
 import {
   fetchHistorialTanques,
@@ -41,6 +47,7 @@ import {
 } from "@/lib/data/tanques";
 
 const PRODUCTO_IDS: ProductoId[] = ["bio", "regular", "premium", "glp"];
+const DIAS_INVENTARIO = 7;
 
 // Capacidad máxima sugerida por defecto (editable por el medidor la primera
 // vez; luego el sistema recuerda la última capacidad registrada).
@@ -92,6 +99,16 @@ const COLOR_TANQUE: Record<
 };
 
 const gal = (n: number) => `${n.toLocaleString("es-PE", { maximumFractionDigits: 0 })} gal`;
+
+function diasOperativosDesde(desde: string, hasta: string, maxDias = DIAS_INVENTARIO) {
+  const dias: string[] = [];
+  let dia = desde;
+  while (dia <= hasta && dias.length < maxDias) {
+    dias.push(dia);
+    dia = diaMenos(dia, -1);
+  }
+  return dias;
+}
 
 function TanqueVisual({
   pct,
@@ -187,10 +204,14 @@ export default function InventarioTanquesPage() {
   const cargar = useCallback(async () => {
     setCargando(true);
     try {
+      const desdeInventario = diaMenos(diaOperativoActual(), DIAS_INVENTARIO - 1);
       const [ultimos, hist, ses] = await Promise.all([
         fetchUltimosRegistrosTanques(),
-        fetchHistorialTanques({ desde: diaMenos(diaOperativoActual(), 1), limite: 60 }),
-        fetchSesionesDesde(diaMenos(diaOperativoActual(), 8)),
+        fetchHistorialTanques({
+          desde: desdeInventario,
+          limite: 200,
+        }),
+        fetchSesionesDesde(desdeInventario),
       ]);
       const [caps, rec] = await Promise.all([
         fetchCapacidadesTanques(),
@@ -246,19 +267,31 @@ export default function InventarioTanquesPage() {
 
   const totalGalonesHoy = PRODUCTO_IDS.reduce((a, p) => a + galonesHoy[p], 0);
 
-  // Promedio diario de galones vendidos por producto, últimos 7 días
-  // operativos completos (sin contar hoy, que sigue en curso).
-  const promedio7d = useMemo(() => {
-    const dias = Array.from({ length: 7 }, (_, i) => diaMenos(hoy, i + 1));
-    const out: Record<ProductoId, number> = { bio: 0, regular: 0, premium: 0, glp: 0 };
-    for (const dia of dias) {
-      const delDia = sesiones.filter((s) => diaOperativo(s) === dia);
-      const reporte = calcularReporteDia(delDia, dia, precios);
-      for (const f of reporte.porProducto) out[f.producto] += f.galones;
+  const galonesPorDia = useMemo(() => {
+    const out = new Map<string, Record<ProductoId, number>>();
+    for (const s of sesiones) {
+      if (!s.cerrada) continue;
+      const dia = diaOperativo(s);
+      const actual = out.get(dia) ?? { bio: 0, regular: 0, premium: 0, glp: 0 };
+      const galones = galonesPorProducto(s);
+      for (const p of PRODUCTO_IDS) actual[p] += galones[p] ?? 0;
+      out.set(dia, actual);
     }
-    for (const p of PRODUCTO_IDS) out[p] = out[p] / dias.length;
     return out;
-  }, [sesiones, hoy, precios]);
+  }, [sesiones]);
+
+  // Promedio diario desde la ultima medicion registrada, hasta 7 dias operativos.
+  const promedio7d = useMemo(() => {
+    const out: Record<ProductoId, number> = { bio: 0, regular: 0, premium: 0, glp: 0 };
+    for (const p of PRODUCTO_IDS) {
+      const medicion = registros.find((r) => r.producto === p);
+      if (!medicion) continue;
+      const dias = diasOperativosDesde(medicion.fechaMedicion, hoy);
+      const vendido = dias.reduce((a, dia) => a + (galonesPorDia.get(dia)?.[p] ?? 0), 0);
+      out[p] = dias.length > 0 ? vendido / dias.length : 0;
+    }
+    return out;
+  }, [registros, hoy, galonesPorDia]);
 
   // Nivel actual estimado = último nivel medido − lo vendido hoy (referencia).
   const capacidadPorProducto = useMemo(() => {
@@ -279,16 +312,42 @@ export default function InventarioTanquesPage() {
     [recargas]
   );
 
+  const galonesVendidosDesdeMedicion = useCallback(
+    (p: ProductoId, medicion: TanqueRegistro) =>
+      diasOperativosDesde(medicion.fechaMedicion, hoy).reduce(
+        (a, dia) => a + (galonesPorDia.get(dia)?.[p] ?? 0),
+        0
+      ),
+    [galonesPorDia, hoy]
+  );
+
+  const historialAgrupado = useMemo(() => {
+    const porFecha = new Map<string, Partial<Record<ProductoId, TanqueRegistro>>>();
+    for (const r of historial) {
+      const fila = porFecha.get(r.fechaMedicion) ?? {};
+      const actual = fila[r.producto];
+      if (!actual || r.createdAt > actual.createdAt) fila[r.producto] = r;
+      porFecha.set(r.fechaMedicion, fila);
+    }
+    return Array.from(porFecha.entries()).sort(([a], [b]) => b.localeCompare(a));
+  }, [historial]);
+
   const nivelActual = useCallback(
     (p: ProductoId) => {
       const r = registros.find((x) => x.producto === p);
       if (!r) return null;
       const recargado = recargasDesdeMedicion(p, r);
+      const vendido = galonesVendidosDesdeMedicion(p, r);
       const capacidadMax = capacidadPorProducto[p];
-      const estimado = Math.max(0, Math.min(capacidadMax, r.nivelMedido + recargado - galonesHoy[p]));
-      return { ...r, capacidadMax, recargado, estimado };
+      const estimado = Math.max(0, Math.min(capacidadMax, r.nivelMedido + recargado - vendido));
+      return { ...r, capacidadMax, recargado, vendido, estimado };
     },
-    [registros, recargasDesdeMedicion, capacidadPorProducto, galonesHoy]
+    [
+      registros,
+      recargasDesdeMedicion,
+      galonesVendidosDesdeMedicion,
+      capacidadPorProducto,
+    ]
   );
 
   const onChangeForm = (p: ProductoId, campo: "nivel" | "fecha", v: string) => {
@@ -311,6 +370,11 @@ export default function InventarioTanquesPage() {
       }
       toast.success("Registro semanal guardado");
       await cargar();
+      setForm(() => {
+        const next = {} as Record<ProductoId, { nivel: string; fecha: string }>;
+        for (const p of PRODUCTO_IDS) next[p] = { nivel: "", fecha: hoy };
+        return next;
+      });
     } catch (e) {
       toast.error("No se pudo guardar: " + (e as Error).message);
     } finally {
@@ -415,7 +479,7 @@ export default function InventarioTanquesPage() {
                     <div className="mt-1 text-xs text-muted-foreground">Cantidad actual estimada</div>
                   </div>
                   <div className="mt-1 text-[11px] text-muted-foreground">
-                    Medido {gal(r.nivelMedido)} el {r.fechaMedicion} · +{gal(r.recargado)} recargado · -{gal(galonesHoy[p])} vendido hoy
+                    Medido {gal(r.nivelMedido)} el {r.fechaMedicion} · +{gal(r.recargado)} recargado · -{gal(r.vendido)} vendido desde medición
                   </div>
                 </>
               ) : (
@@ -488,7 +552,7 @@ export default function InventarioTanquesPage() {
                 {guardando ? "Guardando…" : "Guardar Registro Semanal"}
               </Button>
               <p className="mt-2 text-xs text-muted-foreground">
-                Este registro se realiza semanalmente. El sistema descuenta lo vendido hoy
+                Este registro se realiza semanalmente. El sistema descuenta lo vendido desde esa medición
                 (según odómetros) solo para mostrar un estimado; no altera ningún dato real.
               </p>
             </TabsContent>
@@ -632,38 +696,56 @@ export default function InventarioTanquesPage() {
             </TabsContent>
 
             <TabsContent value="historial">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  Ultimos 7 dias operativos, una fila por medicion.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    toast.info("Exportacion Excel lista para conectar cuando compartas la plantilla.")
+                  }
+                >
+                  <Download className="mr-1.5 h-4 w-4" />
+                  Exportar historial Excel
+                </Button>
+              </div>
               <div className="max-h-96 overflow-x-auto overflow-y-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead>Fecha</TableHead>
-                      <TableHead>Producto</TableHead>
-                      <TableHead>Nivel medido</TableHead>
-                      <TableHead>Capacidad vigente</TableHead>
+                      {PRODUCTO_IDS.map((p) => (
+                        <TableHead key={p} className={COLOR_TANQUE[p].texto}>
+                          {PRODUCTOS[p]}
+                        </TableHead>
+                      ))}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {cargando ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
                           Cargando…
                         </TableCell>
                       </TableRow>
-                    ) : historial.length === 0 ? (
+                    ) : historialAgrupado.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
+                        <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
                           Sin registros.
                         </TableCell>
                       </TableRow>
                     ) : (
-                      historial.map((r) => (
-                        <TableRow key={r.id}>
-                          <TableCell className="whitespace-nowrap text-xs">{r.fechaMedicion}</TableCell>
-                          <TableCell className={COLOR_TANQUE[r.producto].texto}>
-                            {PRODUCTOS[r.producto]}
-                          </TableCell>
-                          <TableCell>{gal(r.nivelMedido)}</TableCell>
-                          <TableCell>{gal(capacidadPorProducto[r.producto])}</TableCell>
+                      historialAgrupado.map(([fecha, fila]) => (
+                        <TableRow key={fecha}>
+                          <TableCell className="whitespace-nowrap text-xs font-medium">{fecha}</TableCell>
+                          {PRODUCTO_IDS.map((p) => (
+                            <TableCell key={p} className="tabular-nums">
+                              {fila[p] ? gal(fila[p]!.nivelMedido) : "-"}
+                            </TableCell>
+                          ))}
                         </TableRow>
                       ))
                     )}
@@ -694,8 +776,10 @@ export default function InventarioTanquesPage() {
           </div>
 
           <div className="rounded-xl border bg-card p-4">
-            <h2 className="font-semibold">Promedio diario (7 días)</h2>
-            <p className="mb-3 text-xs text-muted-foreground">Galones/día vendidos por producto</p>
+            <h2 className="font-semibold">Promedio desde medición</h2>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Galones/día vendidos desde la ultima medicion, maximo 7 dias operativos
+            </p>
             <div className="space-y-2">
               {PRODUCTO_IDS.map((p) => (
                 <div key={p} className="flex items-center justify-between text-sm">

@@ -4,6 +4,7 @@
 // grifo, liberar turnos abiertos y reset de la base de datos (zona de pruebas).
 // Extraída de admin/page.tsx sin cambios de comportamiento; page.tsx mantiene el
 // estado y pasa los handlers.
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -17,9 +18,11 @@ import {
   Settings,
   Tag,
   Trash2,
+  UserCog,
 } from "lucide-react";
-import { getIsla, turnoLabel } from "@/lib/config";
-import type { Permiso, Sesion } from "@/lib/types";
+import { getIsla, ISLAS, TURNOS, turnoLabel } from "@/lib/config";
+import { diaOperativo } from "@/lib/calc";
+import type { Permiso, Sesion, TurnoId } from "@/lib/types";
 import type { Backup } from "@/lib/db";
 
 export function VistaConfig({
@@ -39,6 +42,10 @@ export function VistaConfig({
   setNombreGrifoLocal,
   guardarNombreGrifo,
   activos,
+  sesiones,
+  trabajadores,
+  corrigiendoTrabajadorId,
+  onCorregirTrabajadorTurno,
   setTurnoALiberar,
   setConfirmandoReset,
 }: {
@@ -58,15 +65,52 @@ export function VistaConfig({
   setNombreGrifoLocal: (v: string) => void;
   guardarNombreGrifo: () => void;
   activos: Sesion[];
+  sesiones: Sesion[];
+  trabajadores: string[];
+  corrigiendoTrabajadorId: string | null;
+  onCorregirTrabajadorTurno: (sesionId: string, nuevoTrabajador: string) => void;
   setTurnoALiberar: (s: Sesion) => void;
   setConfirmandoReset: (v: boolean) => void;
 }) {
+  const diasTurnos = useMemo(
+    () =>
+      Array.from(new Set(sesiones.map((s) => diaOperativo(s))))
+        .sort((a, b) => (a < b ? 1 : -1)),
+    [sesiones]
+  );
+  const [diaCorreccion, setDiaCorreccion] = useState<string | null>(null);
+  const diaActivo = diaCorreccion && diasTurnos.includes(diaCorreccion)
+    ? diaCorreccion
+    : diasTurnos[0] ?? null;
+  const sesionesDia = useMemo(
+    () => sesiones.filter((s) => diaActivo && diaOperativo(s) === diaActivo),
+    [sesiones, diaActivo]
+  );
+  const [sesionCorreccionId, setSesionCorreccionId] = useState<string | null>(null);
+  const sesionCorreccion =
+    sesiones.find((s) => s.id === sesionCorreccionId) ?? null;
+  const nombresCorreccion = useMemo(() => {
+    const nombres = [...trabajadores];
+    if (
+      sesionCorreccion?.trabajador &&
+      !nombres.includes(sesionCorreccion.trabajador)
+    ) {
+      nombres.push(sesionCorreccion.trabajador);
+    }
+    return nombres;
+  }, [trabajadores, sesionCorreccion?.trabajador]);
+  const sesionEn = (islaId: string, turno: TurnoId) =>
+    sesionesDia.find((s) => s.islaId === islaId && s.turno === turno);
+
   return (
-    <div className="max-w-md rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+    <div className="max-w-5xl rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
       <h3 className="mb-1 flex items-center gap-2 text-base font-bold">
         <Settings className="h-4 w-4" /> Configuraciones
       </h3>
-      {!can("reset") && !can("backups-ver") && !can("backups-generar") ? (
+      {!can("reset") &&
+      !can("backups-ver") &&
+      !can("backups-generar") &&
+      !can("corregir-trabajador-turno") ? (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
             No tienes permiso para ver esta sección. Pídele al dueño el permiso
@@ -75,6 +119,137 @@ export function VistaConfig({
         </div>
       ) : (
         <div className="space-y-4">
+          {can("corregir-trabajador-turno") && (
+            <div className="rounded-lg border border-emerald-300/60 bg-emerald-50 p-3 dark:border-emerald-500/30 dark:bg-emerald-950/20">
+              <h4 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-emerald-700 dark:text-emerald-300">
+                <UserCog className="h-4 w-4" /> Cambiar nombre de trabajador
+              </h4>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Corrige solo el nombre del trabajador de un turno. No mueve
+                registros, odómetros, isla ni turno.
+              </p>
+
+              {diasTurnos.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  Aún no hay turnos registrados.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-1.5">
+                    {diasTurnos.slice(0, 14).map((d) => (
+                      <Button
+                        key={d}
+                        size="sm"
+                        variant={d === diaActivo ? "default" : "outline"}
+                        className="h-8 px-2 text-xs"
+                        onClick={() => {
+                          setDiaCorreccion(d);
+                          setSesionCorreccionId(null);
+                        }}
+                      >
+                        {d}
+                      </Button>
+                    ))}
+                  </div>
+
+                  <div className="overflow-x-auto rounded-lg border bg-card">
+                    <div className="min-w-[680px]">
+                      <div className="grid grid-cols-[150px_repeat(3,minmax(0,1fr))] border-b bg-muted/60 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
+                        <div className="p-2">Isla</div>
+                        {TURNOS.map((t) => (
+                          <div key={t.id} className="p-2 text-center">
+                            {t.label}
+                          </div>
+                        ))}
+                      </div>
+                      {ISLAS.map((isla) => (
+                        <div
+                          key={isla.id}
+                          className="grid grid-cols-[150px_repeat(3,minmax(0,1fr))] border-b last:border-b-0"
+                        >
+                          <div className="flex items-center p-2 text-xs font-semibold">
+                            {isla.nombre}
+                          </div>
+                          {TURNOS.map((t) => {
+                            const s = sesionEn(isla.id, t.id);
+                            const activo = s?.id === sesionCorreccionId;
+                            return (
+                              <button
+                                key={t.id}
+                                type="button"
+                                disabled={!s}
+                                onClick={() => s && setSesionCorreccionId(s.id)}
+                                className={`min-h-16 border-l p-2 text-left text-xs transition-colors ${
+                                  s
+                                    ? activo
+                                      ? "bg-emerald-500/20 ring-1 ring-inset ring-emerald-500"
+                                      : "bg-card hover:bg-accent"
+                                    : "cursor-not-allowed bg-muted/30 text-muted-foreground"
+                                }`}
+                              >
+                                <div className="font-bold">
+                                  {s?.trabajador || "Libre"}
+                                </div>
+                                <div className="mt-0.5 text-[11px] text-muted-foreground">
+                                  {s ? (s.cerrada ? "Finalizado" : "En curso") : "Sin turno"}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {sesionCorreccion ? (
+                    <div className="rounded-lg border bg-card p-3 text-xs">
+                      <div className="mb-2 font-semibold">
+                        {getIsla(sesionCorreccion.islaId)?.nombre ?? sesionCorreccion.islaId} ·{" "}
+                        {turnoLabel(sesionCorreccion.turno)} ·{" "}
+                        {sesionCorreccion.diaOperativo}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-muted-foreground">
+                          Nombre actual:
+                        </span>
+                        <span className="rounded bg-muted px-2 py-1 font-bold">
+                          {sesionCorreccion.trabajador || "(sin trabajador)"}
+                        </span>
+                        <select
+                          className="h-9 rounded-md border bg-background px-2 text-sm"
+                          value=""
+                          disabled={corrigiendoTrabajadorId === sesionCorreccion.id}
+                          onChange={(e) => {
+                            const nuevo = e.target.value;
+                            if (!nuevo) return;
+                            onCorregirTrabajadorTurno(sesionCorreccion.id, nuevo);
+                            e.currentTarget.value = "";
+                          }}
+                        >
+                          <option value="">Cambiar a...</option>
+                          {nombresCorreccion
+                            .filter((n) => n !== sesionCorreccion.trabajador)
+                            .map((n) => (
+                              <option key={n} value={n}>
+                                {n}
+                              </option>
+                            ))}
+                        </select>
+                        {corrigiendoTrabajadorId === sesionCorreccion.id && (
+                          <span className="text-muted-foreground">Guardando...</span>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      Selecciona un turno de la matriz para corregir el nombre.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Copias de seguridad */}
           <div className="rounded-lg border border-sky-300/60 bg-sky-50 p-3 dark:border-sky-500/30 dark:bg-sky-950/20">
             <h4 className="mb-1 flex items-center gap-1.5 text-sm font-bold text-sky-700 dark:text-sky-300">

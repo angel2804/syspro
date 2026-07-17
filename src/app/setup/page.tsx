@@ -47,6 +47,7 @@ export default function SetupPage() {
   // Cuadro de confirmación: el trabajador debe re-confirmar en qué isla está
   // físicamente antes de arrancar, para no repetir el error de elegir mal.
   const [confirmandoIsla, setConfirmandoIsla] = useState(false);
+  const [confirmandoNombre, setConfirmandoNombre] = useState(false);
 
   // Día operativo "activo" del sistema: no depende del reloj, depende de
   // qué día más antiguo todavía no completó sus 9 turnos en los reportes.
@@ -181,7 +182,7 @@ export default function SetupPage() {
       return;
     }
     setConfirmandoIsla(false);
-    empezar();
+    setConfirmandoNombre(true);
   }
 
   return (
@@ -424,6 +425,50 @@ export default function SetupPage() {
               }}
             >
               No, elegir otra
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmandoNombre} onOpenChange={setConfirmandoNombre}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirma tu nombre</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Estás empezando turno con el nombre de:
+          </p>
+          <div className="my-2 rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-6 text-center">
+            <p className="break-words text-4xl font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+              {auth.trabajador}
+            </p>
+            <p className="mt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              {sel
+                ? `${ISLAS.find((i) => i.id === sel.islaId)?.nombre ?? ""} · ${
+                    TURNOS.find((t) => t.id === sel.turno)?.label ?? sel.turno
+                  }`
+                : ""}
+            </p>
+          </div>
+          <div className="grid gap-2">
+            <Button
+              className="h-12 bg-gradient-to-r from-amber-500 to-green-700 text-base font-bold text-white hover:from-amber-400 hover:to-emerald-600"
+              onClick={() => {
+                setConfirmandoNombre(false);
+                empezar();
+              }}
+            >
+              <CheckCircle2 className="mr-1.5 h-5 w-5" /> Continuar
+            </Button>
+            <Button
+              variant="outline"
+              className="h-11"
+              onClick={() => {
+                setConfirmandoNombre(false);
+                setSel(null);
+              }}
+            >
+              Cancelar
             </Button>
           </div>
         </DialogContent>

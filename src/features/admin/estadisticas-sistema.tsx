@@ -71,7 +71,7 @@ export function EstadisticasSistema({
 
   return (
     <section className="space-y-4">
-      <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+      <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-bold">Estadisticas del sistema</h2>
@@ -83,7 +83,7 @@ export function EstadisticasSistema({
             Vista general
           </span>
         </div>
-        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <KpiCard
         icon={<Banknote className="h-4 w-4" />}
         label="Venta del día"
@@ -135,7 +135,7 @@ export function EstadisticasSistema({
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_1.2fr]">
-        <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+        <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="font-semibold">Venta por combustible</h3>
             <span className="text-xs text-muted-foreground">
@@ -167,10 +167,13 @@ export function EstadisticasSistema({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm">
+        <div className="rounded-2xl border border-border/60 bg-card p-5 shadow-sm">
           <div className="mb-3 flex items-center justify-between">
             <h3 className="font-semibold">Resumen de tanques</h3>
-            <Link href="/admin/inventario" className="text-xs font-medium text-primary hover:underline">
+            <Link
+              href="/admin/inventario"
+              className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/15"
+            >
               Ver inventario
             </Link>
           </div>
@@ -179,30 +182,44 @@ export function EstadisticasSistema({
               Todavia no hay mediciones registradas.
             </p>
           ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2">
               {PRODUCTOS_IDS_RESUMEN.map((producto) => {
                 const registro = tanques.find((t) => t.producto === producto);
                 if (!registro) return null;
                 const vendidos = galonesHoy.find((g) => g.producto === producto)?.galones ?? 0;
                 const actual = Math.max(0, registro.nivelMedido - vendidos);
-                const pct = Math.min(100, Math.round((actual / registro.capacidadMax) * 100));
+                const capacidad = Math.max(1, registro.capacidadMax);
+                const pct = Math.min(100, Math.round((actual / capacidad) * 100));
+                const estado =
+                  pct <= 20 ? "Bajo" : pct <= 45 ? "Revisar" : pct >= 85 ? "Alto" : "Normal";
                 return (
-                  <div key={producto} className="rounded-xl border bg-muted/20 p-3">
+                  <div key={producto} className="rounded-xl border border-border/70 bg-muted/20 p-3.5">
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <span className={`text-sm font-bold ${PRODUCTO_RESUMEN_COLOR[producto].text}`}>
                         {PRODUCTOS[producto]}
                       </span>
-                      <span className="text-xs font-semibold tabular-nums">{pct}%</span>
+                      <span className="rounded-full bg-background px-2 py-0.5 text-xs font-semibold tabular-nums">
+                        {pct}%
+                      </span>
                     </div>
-                    <div className="h-2 overflow-hidden rounded-full bg-background">
+                    <div className="h-2.5 overflow-hidden rounded-full bg-background">
                       <div
                         className={`h-full rounded-full ${PRODUCTO_RESUMEN_COLOR[producto].bar}`}
                         style={{ width: `${pct}%` }}
                       />
                     </div>
-                    <div className="mt-2 flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span>{actual.toLocaleString("es-PE", { maximumFractionDigits: 0 })} gal</span>
-                      <span>max {registro.capacidadMax.toLocaleString("es-PE")} gal</span>
+                    <div className="mt-3 flex items-end justify-between gap-3">
+                      <div>
+                        <div className="text-lg font-extrabold tabular-nums">
+                          {actual.toLocaleString("es-PE", { maximumFractionDigits: 0 })} gal
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">
+                          max {capacidad.toLocaleString("es-PE")} gal
+                        </div>
+                      </div>
+                      <span className="text-[11px] font-semibold text-muted-foreground">
+                        {estado}
+                      </span>
                     </div>
                   </div>
                 );
@@ -227,7 +244,7 @@ function KpiCard({
   pie?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-card p-3 shadow-sm">
+    <div className="rounded-2xl border border-border/60 bg-muted/15 p-4 shadow-sm">
       <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
         <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
           {icon}

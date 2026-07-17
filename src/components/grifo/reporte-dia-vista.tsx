@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -25,6 +26,7 @@ import {
   TURNOS,
 } from "@/lib/config";
 import { calcularReporteDia, preciosDe, soles } from "@/lib/calc";
+import { abrirTicketPdf80mm } from "@/lib/ticket-print";
 import { clientesOrdenados } from "@/lib/clientes-autocompletado";
 import { useStore } from "@/lib/store";
 import type { PagoElectronico, Precios, ProductoId, Sesion, TurnoId } from "@/lib/types";
@@ -42,6 +44,7 @@ import {
   Calculator,
   Cylinder,
   CheckCircle2,
+  Printer,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -114,6 +117,8 @@ interface Props {
   // Muestra la tabla "Venta a precio normal". Se oculta para admins sin ese
   // permiso. Por defecto visible.
   mostrarVentaNormal?: boolean;
+  // Boton de prueba para dueño: imprime ticket termico 80mm del filtro actual.
+  puedeImprimirTicket?: boolean;
 }
 
 function productoOpts(s: Sesion) {
@@ -133,6 +138,7 @@ export function ReporteDiaVista({
   onUpdateOdometro,
   onSetPreciosSesion,
   mostrarVentaNormal = true,
+  puedeImprimirTicket = false,
 }: Props) {
   // Turno específico (mañana/tarde/noche) o "general" (todo el día). Isla opcional.
   const [filtroTurno, setFiltroTurno] = useState<string>("manana");
@@ -156,6 +162,9 @@ export function ReporteDiaVista({
   );
 
   const rep = calcularReporteDia(filtradas, dia, precios);
+  const tituloTicket = esGeneral
+    ? "RESUMEN GENERAL"
+    : `RESUMEN TURNO ${TURNOS.find((t) => t.id === filtroTurno)?.label.toUpperCase() ?? filtroTurno.toUpperCase()}`;
 
   const islasMostrar =
     filtroIsla === "todas" ? ISLAS : ISLAS.filter((i) => i.id === filtroIsla);
@@ -418,6 +427,19 @@ export function ReporteDiaVista({
 
   return (
     <div className="space-y-3 text-xs">
+      {puedeImprimirTicket && (
+        <TicketReporte80mm
+          titulo={tituloTicket}
+          dia={dia}
+          turno={filtroTurno}
+          isla={filtroIsla}
+          sesiones={filtradas}
+          rep={rep}
+          totalContado={totalContado}
+          diferenciaTrabajador={-cuadreTrabajadores}
+          diferenciaConteo={-cuadreAdmin}
+        />
+      )}
       {/* Filtros: turno (siempre) + isla (opcional para reporte individual) */}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-2 shadow-sm">
         <span className="text-[11px] font-bold text-muted-foreground">TURNO:</span>
@@ -452,6 +474,24 @@ export function ReporteDiaVista({
           </SelectContent>
         </Select>
         <span className="ml-auto text-[11px] text-muted-foreground">{dia}</span>
+        {puedeImprimirTicket && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={() =>
+              abrirTicketPdf80mm(
+                document.querySelector(".admin-ticket-80mm")?.outerHTML ?? "",
+                "Ticket de prueba"
+              )
+            }
+            disabled={filtradas.length === 0}
+          >
+            <Printer className="mr-1.5 h-3.5 w-3.5" />
+            Imprimir ticket prueba
+          </Button>
+        )}
       </div>
 
       {/* Encargados del turno (y faltas) */}
@@ -806,4 +846,284 @@ function Fila({
       </span>
     </div>
   );
+}
+
+function TicketReporte80mm({
+  titulo,
+  dia,
+  turno,
+  isla,
+  sesiones,
+  rep,
+  totalContado,
+  diferenciaTrabajador,
+  diferenciaConteo,
+}: {
+  titulo: string;
+  dia: string;
+  turno: string;
+  isla: string;
+  sesiones: Sesion[];
+  rep: ReturnType<typeof calcularReporteDia>;
+  totalContado: number;
+  diferenciaTrabajador: number;
+  diferenciaConteo: number;
+}) {
+  const trabajadores = sesiones.map((s) => s.trabajador).filter(Boolean).join(", ") || "-";
+  const subtituloTurno =
+    turno === "general"
+      ? "General"
+      : TURNOS.find((t) => t.id === turno)?.label ?? turno;
+  const subtituloIsla =
+    isla === "todas" ? "Todas" : ISLAS.find((i) => i.id === isla)?.nombre ?? isla;
+  const galonesProducto = rep.porProducto.filter((p) => p.galones > 0.0001);
+
+  return (
+    <>
+      <div className="admin-ticket-print-root" aria-hidden="true">
+        <section className="admin-ticket-80mm">
+          <h1>ESTACION DE SERVICIO</h1>
+          <h2>{titulo}</h2>
+
+          <div className="ticket-block">
+            <TicketLine label="Dia" value={fechaTicket(dia)} />
+            <TicketLine label="Turno" value={subtituloTurno} />
+            <TicketLine label="Isla" value={subtituloIsla} />
+            <TicketLine label="Trabajadores" value={trabajadores} />
+          </div>
+
+          <TicketSep />
+          <h3>GALONES VENDIDOS</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Galones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {galonesProducto.map((p) => (
+                <tr key={p.producto}>
+                  <td>{PRODUCTOS[p.producto]}</td>
+                  <td>{numTicket(p.galones)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <TicketSep />
+          <h3>RESUMEN</h3>
+          <TicketMoney label="Venta total" value={rep.ventaTotal} />
+          <TicketMoney label="Pagos digitales" value={rep.totalElectronico} signo="-" />
+          <TicketMoney label="Creditos" value={rep.totalCreditos} signo="-" />
+          <TicketMoney label="Promociones" value={rep.totalPromociones} signo="-" />
+          <TicketMoney label="Descuentos" value={rep.totalDescuentos} signo="-" />
+          <TicketMoney label="Gastos" value={rep.totalGastos} signo="-" />
+          <TicketMoney label="Adelantos" value={rep.totalAdelantos} signo="+" />
+          {rep.totalBalones > 0 && <TicketMoney label="Balones" value={rep.totalBalones} signo="+" />}
+          <TicketMoney label="Efectivo esperado" value={rep.efectivoAEntregar} strong />
+          <TicketMoney label="Entregado" value={rep.totalEntregado} strong />
+          <TicketMoney label="Contado admin" value={totalContado} />
+          <TicketMoney label="Dif. entregado" value={diferenciaTrabajador} signed strong />
+          <TicketMoney label="Dif. contado" value={diferenciaConteo} signed />
+
+          <div className="ticket-signatures">
+            <div>Firma Admin: _______________________</div>
+            <div>Firma Encargado: ___________________</div>
+          </div>
+          <p className="ticket-thanks">Ticket de prueba</p>
+        </section>
+      </div>
+      <style jsx global>{`
+        .admin-ticket-print-root {
+          display: none;
+        }
+
+        @media print {
+          @page {
+            size: 80mm auto;
+            margin: 4mm;
+          }
+
+          body * {
+            visibility: hidden !important;
+          }
+
+          .admin-ticket-print-root,
+          .admin-ticket-print-root * {
+            visibility: visible !important;
+          }
+
+          .admin-ticket-print-root {
+            display: block !important;
+            position: absolute;
+            inset: 0 auto auto 0;
+            width: 72mm;
+            background: white;
+            color: black;
+          }
+
+          .admin-ticket-80mm {
+            width: 72mm;
+            font-family: "Courier New", monospace;
+            font-size: 10px;
+            line-height: 1.25;
+            color: black;
+          }
+
+          .admin-ticket-80mm h1,
+          .admin-ticket-80mm h2,
+          .admin-ticket-80mm h3 {
+            margin: 0;
+            text-align: center;
+            font-weight: 700;
+          }
+
+          .admin-ticket-80mm h1,
+          .admin-ticket-80mm h2 {
+            font-size: 12px;
+          }
+
+          .admin-ticket-80mm h2 {
+            margin-bottom: 8px;
+          }
+
+          .admin-ticket-80mm h3 {
+            margin: 4px 0;
+            font-size: 11px;
+          }
+
+          .ticket-block {
+            margin-top: 4px;
+          }
+
+          .ticket-line,
+          .ticket-money {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+          }
+
+          .ticket-line span:first-child,
+          .ticket-money span:first-child {
+            white-space: nowrap;
+          }
+
+          .ticket-line span:last-child,
+          .ticket-money span:last-child {
+            text-align: right;
+          }
+
+          .ticket-sep {
+            margin: 5px 0;
+            border-top: 1px dashed black;
+          }
+
+          .admin-ticket-80mm table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+          }
+
+          .admin-ticket-80mm th,
+          .admin-ticket-80mm td {
+            padding: 1px 0;
+            text-align: right;
+            vertical-align: top;
+          }
+
+          .admin-ticket-80mm th:first-child,
+          .admin-ticket-80mm td:first-child {
+            width: 34%;
+            overflow-wrap: anywhere;
+            text-align: left;
+          }
+
+          .admin-ticket-80mm th {
+            font-weight: 700;
+          }
+
+          .ticket-strong {
+            font-weight: 700;
+          }
+
+          .ticket-signatures {
+            margin-top: 12px;
+            display: grid;
+            gap: 8px;
+          }
+
+          .ticket-thanks {
+            margin: 10px 0 0;
+            text-align: center;
+            font-weight: 700;
+          }
+        }
+      `}</style>
+    </>
+  );
+}
+
+function TicketLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="ticket-line">
+      <span>{label}:</span>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function TicketMoney({
+  label,
+  value,
+  strong,
+  signo,
+  signed,
+}: {
+  label: string;
+  value: number;
+  strong?: boolean;
+  signo?: "+" | "-";
+  signed?: boolean;
+}) {
+  const monto = signo === "-" ? -Math.abs(value) : signo === "+" ? Math.abs(value) : value;
+  return (
+    <div className={cn("ticket-money", strong && "ticket-strong")}>
+      <span>{label}:</span>
+      <span>{signed || signo ? solesTicketFirmado(monto) : solesTicket(value)}</span>
+    </div>
+  );
+}
+
+function TicketSep() {
+  return <div className="ticket-sep" />;
+}
+
+function fechaTicket(fecha: string) {
+  const [y, m, d] = fecha.split("-");
+  if (!y || !m || !d) return fecha;
+  return `${d}/${m}/${y}`;
+}
+
+function numTicket(n: number) {
+  return n.toLocaleString("es-PE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function solesTicket(n: number) {
+  return `S/ ${Math.abs(n).toLocaleString("es-PE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function solesTicketFirmado(n: number) {
+  const signo = n < 0 ? "-" : "";
+  const positivo = n > 0 ? "+" : "";
+  return `${signo || positivo}S/ ${Math.abs(n).toLocaleString("es-PE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }

@@ -35,7 +35,8 @@ import { useStore } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
 import { logoutSupabase } from "@/lib/data/auth";
 import { guardarSesionPendiente, limpiarSesionPendiente } from "@/lib/offline-sesion";
-import { calcularCuadre, preciosDe, soles } from "@/lib/calc";
+import { calcularCuadre, preciosDe, soles, type Cuadre } from "@/lib/calc";
+import { abrirTicketPdf80mm } from "@/lib/ticket-print";
 import { contarPorSeveridad, puedeCerrar, validarCierre } from "@/lib/domain/cierre";
 import { clientesOrdenados } from "@/lib/clientes-autocompletado";
 import type {
@@ -48,6 +49,7 @@ import type {
   PagoElectronico,
   Promocion,
   ProductoId,
+  Sesion,
 } from "@/lib/types";
 import { SyncBadge } from "@/components/sync-badge";
 import { RegistroModal } from "@/components/grifo/registro-modal";
@@ -251,6 +253,10 @@ export default function DashboardPage() {
     }
     setFinalizandoCierre(false);
     setConfirmandoCierre(false);
+    abrirTicketPdf80mm(
+      document.querySelector(".ticket-80mm")?.outerHTML ?? "",
+      "Resumen de turno"
+    );
     setCurrentSesion(null);
     router.push("/setup");
   }
@@ -263,9 +269,18 @@ export default function DashboardPage() {
   const cDescuento = colsDescuento(productoOptions, precio, sugClientesDescuento);
   const cAdelanto = colsAdelanto();
   const cBalon = colsBalon(precios);
+  const ticketCierre = useMemo(
+    () => ({
+      sesion,
+      islaNombre: isla.nombre,
+      cuadre,
+    }),
+    [sesion, isla.nombre, cuadre]
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/40">
+      <TicketTurno80mm {...ticketCierre} />
       {/* Encabezado */}
       <header className="gs-topbar sticky top-0 z-20 border-b border-white/10 text-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2.5">
@@ -900,4 +915,282 @@ function Linea({
       </span>
     </div>
   );
+}
+
+function TicketTurno80mm({
+  sesion,
+  islaNombre,
+  cuadre,
+}: {
+  sesion: Sesion;
+  islaNombre: string;
+  cuadre: Cuadre;
+}) {
+  const inicio = horaTicket(sesion.createdAt);
+  const cierre = horaTicket(sesion.closedAt ?? Date.now());
+  const fecha = fechaTicket(sesion.diaOperativo || sesion.fecha);
+  const pagosDigitales = cuadre.totalElectronico;
+  const diferencia = cuadre.totalEntregado - cuadre.efectivoAEntregar;
+  const galonesProducto = cuadre.porProducto.filter((p) => p.galones > 0.0001);
+
+  return (
+    <>
+      <div className="ticket-print-root" aria-hidden="true">
+        <section className="ticket-80mm">
+          <h1>ESTACION DE SERVICIO</h1>
+          <h2>RESUMEN DE TURNO</h2>
+
+          <div className="ticket-block">
+            <TicketLine label="Trabajador" value={sesion.trabajador} />
+            <TicketLine label="Turno" value={turnoLabel(sesion.turno)} />
+            <TicketLine label="Isla" value={islaNombre.replace(/^Isla\s*/i, "")} />
+            <TicketLine label="Fecha" value={fecha} />
+            <div className="ticket-row">
+              <span>Inicio: {inicio}</span>
+              <span>Cierre: {cierre}</span>
+            </div>
+          </div>
+
+          <TicketSep />
+          <h3>GALONES VENDIDOS</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th>Galones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {galonesProducto.map((p) => (
+                <tr key={p.producto}>
+                  <td>{PRODUCTOS[p.producto]}</td>
+                  <td>{numTicket(p.galones)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <TicketSep />
+          <h3>RESUMEN</h3>
+          <TicketMoney label="Venta total" value={cuadre.ventaTotal} />
+          <TicketMoney label="Pagos digitales" value={pagosDigitales} signo="-" />
+          <TicketMoney label="Creditos" value={cuadre.totalCreditos} signo="-" />
+          <TicketMoney label="Promociones" value={cuadre.totalPromociones} signo="-" />
+          <TicketMoney label="Descuentos" value={cuadre.totalDescuentos} signo="-" />
+          <TicketMoney label="Gastos" value={cuadre.totalGastos} signo="-" />
+          <TicketMoney label="Adelantos" value={cuadre.totalAdelantos} signo="+" />
+          {cuadre.totalBalones > 0 && <TicketMoney label="Balones" value={cuadre.totalBalones} signo="+" />}
+          <TicketMoney label="Efectivo esperado" value={cuadre.efectivoAEntregar} strong />
+          <TicketMoney label="Efectivo entregado" value={cuadre.totalEntregado} strong />
+          <TicketMoney label="Diferencia" value={diferencia} signed strong />
+
+          <div className="ticket-signatures">
+            <div>Firma Trabajador: __________________</div>
+            <div>Firma Encargado: ___________________</div>
+          </div>
+          <p className="ticket-thanks">Gracias!</p>
+        </section>
+      </div>
+      <style jsx global>{`
+        .ticket-print-root {
+          display: none;
+        }
+
+        @media print {
+          @page {
+            size: 80mm auto;
+            margin: 4mm;
+          }
+
+          body * {
+            visibility: hidden !important;
+          }
+
+          .ticket-print-root,
+          .ticket-print-root * {
+            visibility: visible !important;
+          }
+
+          .ticket-print-root {
+            display: block !important;
+            position: absolute;
+            inset: 0 auto auto 0;
+            width: 72mm;
+            background: white;
+            color: black;
+          }
+
+          .ticket-80mm {
+            width: 72mm;
+            font-family: "Courier New", monospace;
+            font-size: 10px;
+            line-height: 1.25;
+            color: black;
+          }
+
+          .ticket-80mm h1,
+          .ticket-80mm h2,
+          .ticket-80mm h3 {
+            margin: 0;
+            text-align: center;
+            font-weight: 700;
+          }
+
+          .ticket-80mm h1 {
+            font-size: 12px;
+          }
+
+          .ticket-80mm h2 {
+            margin-bottom: 8px;
+            font-size: 12px;
+          }
+
+          .ticket-80mm h3 {
+            margin: 4px 0;
+            font-size: 11px;
+          }
+
+          .ticket-block {
+            margin-top: 4px;
+          }
+
+          .ticket-row,
+          .ticket-line,
+          .ticket-money {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+          }
+
+          .ticket-line span:first-child,
+          .ticket-money span:first-child {
+            white-space: nowrap;
+          }
+
+          .ticket-line span:last-child,
+          .ticket-money span:last-child {
+            text-align: right;
+          }
+
+          .ticket-sep {
+            margin: 5px 0;
+            border-top: 1px dashed black;
+          }
+
+          .ticket-80mm table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+          }
+
+          .ticket-80mm th,
+          .ticket-80mm td {
+            padding: 1px 0;
+            text-align: right;
+            vertical-align: top;
+          }
+
+          .ticket-80mm th:first-child,
+          .ticket-80mm td:first-child {
+            text-align: left;
+            width: 31%;
+            overflow-wrap: anywhere;
+          }
+
+          .ticket-80mm th {
+            font-weight: 700;
+          }
+
+          .ticket-money strong,
+          .ticket-money.ticket-strong {
+            font-weight: 700;
+          }
+
+          .ticket-signatures {
+            margin-top: 12px;
+            display: grid;
+            gap: 8px;
+          }
+
+          .ticket-thanks {
+            margin: 10px 0 0;
+            text-align: center;
+            font-weight: 700;
+          }
+        }
+      `}</style>
+    </>
+  );
+}
+
+function TicketLine({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="ticket-line">
+      <span>{label}:</span>
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function TicketMoney({
+  label,
+  value,
+  strong,
+  signo,
+  signed,
+}: {
+  label: string;
+  value: number;
+  strong?: boolean;
+  signo?: "+" | "-";
+  signed?: boolean;
+}) {
+  const monto = signo === "-" ? -Math.abs(value) : signo === "+" ? Math.abs(value) : value;
+  return (
+    <div className={cn("ticket-money", strong && "ticket-strong")}>
+      <span>{label}:</span>
+      <span>{signed || signo ? solesTicketFirmado(monto) : solesTicket(value)}</span>
+    </div>
+  );
+}
+
+function TicketSep() {
+  return <div className="ticket-sep" />;
+}
+
+function horaTicket(ms: number) {
+  return new Date(ms).toLocaleTimeString("es-PE", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
+function fechaTicket(fecha: string) {
+  const [y, m, d] = fecha.split("-");
+  if (!y || !m || !d) return fecha;
+  return `${d}/${m}/${y}`;
+}
+
+function numTicket(n: number) {
+  return n.toLocaleString("es-PE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function solesTicket(n: number) {
+  return `S/ ${Math.abs(n).toLocaleString("es-PE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function solesTicketFirmado(n: number) {
+  const signo = n < 0 ? "-" : "";
+  const positivo = n > 0 ? "+" : "";
+  return `${signo || positivo}S/ ${Math.abs(n).toLocaleString("es-PE", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }

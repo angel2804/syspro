@@ -31,6 +31,7 @@ export const PERMISOS: { id: Permiso; label: string; grupo: string }[] = [
   { id: "backups-generar", label: "Generar backups", grupo: "Sistema" },
   { id: "config", label: "Ver configuraciones", grupo: "Sistema" },
   { id: "config-datos", label: "Cambiar logo/datos del grifo", grupo: "Sistema" },
+  { id: "corregir-trabajador-turno", label: "Corregir trabajador de turno", grupo: "Sistema" },
   { id: "inventario", label: "Ver inventario de tanques", grupo: "Sistema" },
   { id: "reset", label: "Resetear sistema", grupo: "Sistema" },
 ];

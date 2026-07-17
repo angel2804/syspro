@@ -191,6 +191,7 @@ export default function AdminPage() {
   // el slot quede libre "como si no se hubiera empezado".
   const [turnoALiberar, setTurnoALiberar] = useState<Sesion | null>(null);
   const [liberando, setLiberando] = useState(false);
+  const [corrigiendoTrabajadorId, setCorrigiendoTrabajadorId] = useState<string | null>(null);
   // ---- Mover trabajador (corregir isla mal elegida) ----
   const [moverOrigenId, setMoverOrigenId] = useState<string | null>(null);
   const [moverDestinoIsla, setMoverDestinoIsla] = useState<string | null>(null);
@@ -555,6 +556,47 @@ export default function AdminPage() {
     } finally {
       setLiberando(false);
       setTurnoALiberar(null);
+    }
+  }
+
+  // Corrige SOLO el nombre operativo del trabajador en una sesiÃ³n. No toca
+  // registros, odÃ³metros, isla, turno ni precios.
+  async function corregirTrabajadorTurno(sesionId: string, nuevoTrabajador: string) {
+    const s = remote.find((x) => x.id === sesionId);
+    const nombre = nuevoTrabajador.trim();
+    if (!s || !nombre || s.trabajador === nombre) return;
+    const anterior = s.trabajador;
+    const actualizada: Sesion = {
+      ...s,
+      trabajador: nombre,
+      updatedAt: Date.now(),
+    };
+    setCorrigiendoTrabajadorId(sesionId);
+    setRemoteList((prev) => prev.map((x) => (x.id === sesionId ? actualizada : x)));
+    try {
+      await upsertSesion(actualizada);
+      await registrarAuditoria({
+        accion: "edicion_sesion",
+        entidad: "turno",
+        entidadId: sesionId,
+        actorId: auth?.userId,
+        actorNombre: auth?.nombre,
+        detalle: {
+          correccion: "trabajador_turno",
+          dia: actualizada.diaOperativo,
+          isla: actualizada.islaId,
+          turno: actualizada.turno,
+          trabajador_anterior: anterior,
+          trabajador_nuevo: nombre,
+        },
+      });
+      toast.success(`${anterior || "Sin trabajador"} cambiado a ${nombre}`);
+    } catch (e) {
+      console.error("corregir trabajador:", e);
+      setRemoteList((prev) => prev.map((x) => (x.id === sesionId ? s : x)));
+      toast.error("No se pudo cambiar el trabajador del turno");
+    } finally {
+      setCorrigiendoTrabajadorId(null);
     }
   }
 
@@ -1312,6 +1354,7 @@ export default function AdminPage() {
                 onUpdateOdometro={onUpdateOdometro}
                 onSetPreciosSesion={onSetPreciosSesion}
                 mostrarVentaNormal={can("venta-normal")}
+                puedeImprimirTicket={auth.rol === "dueno"}
               />
             ) : (
               <EstadoVacio
@@ -1397,6 +1440,10 @@ export default function AdminPage() {
               setNombreGrifoLocal={setNombreGrifoLocal}
               guardarNombreGrifo={guardarNombreGrifo}
               activos={activos}
+              sesiones={remote}
+              trabajadores={trabajadores}
+              corrigiendoTrabajadorId={corrigiendoTrabajadorId}
+              onCorregirTrabajadorTurno={corregirTrabajadorTurno}
               setTurnoALiberar={setTurnoALiberar}
               setConfirmandoReset={setConfirmandoReset}
             />
