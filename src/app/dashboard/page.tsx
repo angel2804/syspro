@@ -36,7 +36,6 @@ import { useHydrated } from "@/lib/use-hydrated";
 import { logoutSupabase } from "@/lib/data/auth";
 import { guardarSesionPendiente, limpiarSesionPendiente } from "@/lib/offline-sesion";
 import { calcularCuadre, preciosDe, soles, type Cuadre } from "@/lib/calc";
-import { abrirTicketPdf80mm } from "@/lib/ticket-print";
 import { contarPorSeveridad, puedeCerrar, validarCierre } from "@/lib/domain/cierre";
 import { clientesOrdenados } from "@/lib/clientes-autocompletado";
 import type {
@@ -103,6 +102,8 @@ import {
   validarPago,
   validarPromo,
 } from "@/lib/registro-columns";
+
+const TICKET_RESUMEN_TURNO_TRABAJADOR_ACTIVO = false;
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -253,10 +254,6 @@ export default function DashboardPage() {
     }
     setFinalizandoCierre(false);
     setConfirmandoCierre(false);
-    abrirTicketPdf80mm(
-      document.querySelector(".ticket-80mm")?.outerHTML ?? "",
-      "Resumen de turno"
-    );
     setCurrentSesion(null);
     router.push("/setup");
   }
@@ -269,18 +266,12 @@ export default function DashboardPage() {
   const cDescuento = colsDescuento(productoOptions, precio, sugClientesDescuento);
   const cAdelanto = colsAdelanto();
   const cBalon = colsBalon(precios);
-  const ticketCierre = useMemo(
-    () => ({
-      sesion,
-      islaNombre: isla.nombre,
-      cuadre,
-    }),
-    [sesion, isla.nombre, cuadre]
-  );
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/40">
-      <TicketTurno80mm {...ticketCierre} />
+      {TICKET_RESUMEN_TURNO_TRABAJADOR_ACTIVO && (
+        <TicketTurno80mm sesion={sesion} islaNombre={isla.nombre} cuadre={cuadre} />
+      )}
       {/* Encabezado */}
       <header className="gs-topbar sticky top-0 z-20 border-b border-white/10 text-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 py-2.5">
@@ -927,7 +918,7 @@ function TicketTurno80mm({
   cuadre: Cuadre;
 }) {
   const inicio = horaTicket(sesion.createdAt);
-  const cierre = horaTicket(sesion.closedAt ?? Date.now());
+  const cierre = horaTicket(sesion.closedAt ?? sesion.updatedAt ?? sesion.createdAt);
   const fecha = fechaTicket(sesion.diaOperativo || sesion.fecha);
   const pagosDigitales = cuadre.totalElectronico;
   const diferencia = cuadre.totalEntregado - cuadre.efectivoAEntregar;
