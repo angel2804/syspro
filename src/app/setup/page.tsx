@@ -96,6 +96,15 @@ export default function SetupPage() {
     }
   }, [hydrated, auth, miSesionHoy, router, setCurrentSesion]);
 
+  useEffect(() => {
+    const abrirSelectorNombre =
+      typeof window !== "undefined" &&
+      new URLSearchParams(window.location.search).get("cambiarTrabajador") === "1";
+    if (!hydrated || !auth || auth.rol !== "trabajador" || !abrirSelectorNombre) return;
+    setCambiandoTrabajador(true);
+    router.replace("/setup");
+  }, [hydrated, auth, router]);
+
   if (!hydrated || !auth) return null;
 
   const esperandoTurnos = syncEstado === "conectando";
@@ -195,7 +204,7 @@ export default function SetupPage() {
               <Fuel className="h-6 w-6 text-white" />
             </span>
             <div>
-              <h1 className="text-xl font-bold text-white">
+              <h1 className="text-2xl font-black leading-tight text-white sm:text-4xl">
                 Hola, <span className="text-gradient">{esAdmin ? "Administrador" : auth.trabajador}</span>
               </h1>
               <p className="text-sm text-slate-400">
@@ -345,15 +354,17 @@ export default function SetupPage() {
 
       {/* Relevo de turno: elegir el siguiente trabajador sin cerrar sesión */}
       <Dialog open={cambiandoTrabajador} onOpenChange={setCambiandoTrabajador}>
-        <DialogContent>
+        <DialogContent className="w-[min(94vw,760px)] max-w-none">
           <DialogHeader>
-            <DialogTitle>¿Quién empieza el turno?</DialogTitle>
+            <DialogTitle className="text-center text-3xl font-black sm:text-5xl">
+              Selecciona tu nombre
+            </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-center text-lg font-semibold text-muted-foreground">
             Selecciona el nombre del trabajador que va a empezar. No hace falta
             cerrar sesión ni volver a poner la contraseña.
           </p>
-          <div className="mt-1 grid gap-2">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
             {trabajadores.map((nombre) => {
               const activa =
                 hydrated && sesiones.find((s) => s.trabajador === nombre && !s.cerrada);
@@ -362,13 +373,13 @@ export default function SetupPage() {
                 <button
                   key={nombre}
                   onClick={() => cambiarTrabajador(nombre)}
-                  className="group flex items-center justify-between gap-3 rounded-xl border p-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-accent"
+                  className="group flex min-h-24 items-center justify-between gap-4 rounded-xl border p-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary hover:bg-accent"
                 >
                   <span className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-emerald-600 to-green-700 font-bold text-white">
+                    <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-600 to-green-700 text-3xl font-black text-white">
                       {nombre[0]}
                     </span>
-                    <span className="font-medium">{nombre}</span>
+                    <span className="break-words text-2xl font-black sm:text-3xl">{nombre}</span>
                   </span>
                   {esActual ? (
                     <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
@@ -390,22 +401,24 @@ export default function SetupPage() {
 
       {/* Confirmación de isla: el trabajador re-confirma dónde está físicamente */}
       <Dialog open={confirmandoIsla} onOpenChange={setConfirmandoIsla}>
-        <DialogContent>
+        <DialogContent className="flex min-h-[70vh] w-[min(94vw,900px)] max-w-none flex-col justify-center">
           <DialogHeader>
-            <DialogTitle>Confirma tu isla</DialogTitle>
+            <DialogTitle className="text-center text-3xl font-black sm:text-5xl">
+              Confirma tu isla
+            </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-center text-lg font-semibold text-muted-foreground">
             Vas a abrir el turno en esta isla. Confirma que es donde estás
             físicamente.
           </p>
           {/* Isla elegida en grande: confirmación clara con Sí/No, en vez de
               re-listar las 3 (menos toques, mismo control anti-error). */}
-          <div className="my-2 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-5 text-center">
-            <Fuel className="mx-auto mb-1.5 h-7 w-7 text-amber-500" />
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+          <div className="my-4 rounded-xl border border-amber-400/40 bg-amber-500/10 px-6 py-10 text-center">
+            <Fuel className="mx-auto mb-3 h-12 w-12 text-amber-500" />
+            <p className="text-base font-black uppercase tracking-wide text-muted-foreground">
               Isla seleccionada
             </p>
-            <p className="text-2xl font-bold">
+            <p className="mt-2 break-words text-5xl font-black sm:text-7xl">
               {sel ? ISLAS.find((i) => i.id === sel.islaId)?.nombre : ""}
             </p>
           </div>
@@ -431,18 +444,26 @@ export default function SetupPage() {
       </Dialog>
 
       <Dialog open={confirmandoNombre} onOpenChange={setConfirmandoNombre}>
-        <DialogContent>
+        <DialogContent className="flex min-h-[70vh] w-[min(94vw,900px)] max-w-none flex-col justify-center">
           <DialogHeader>
-            <DialogTitle>Confirma tu nombre</DialogTitle>
+            <DialogTitle className="text-center text-3xl font-black sm:text-5xl">
+              Verifica tus datos
+            </DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-center text-lg font-semibold text-muted-foreground">
             Estás empezando turno con el nombre de:
           </p>
-          <div className="my-2 rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-6 text-center">
-            <p className="break-words text-4xl font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300">
+          <div className="my-4 rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-6 py-10 text-center">
+            <p className="text-base font-black uppercase tracking-wide text-muted-foreground">
+              Nombre
+            </p>
+            <p className="mt-2 break-words text-5xl font-black uppercase text-emerald-700 dark:text-emerald-300 sm:text-7xl">
               {auth.trabajador}
             </p>
-            <p className="mt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="mt-8 text-base font-black uppercase tracking-wide text-muted-foreground">
+              Isla y turno
+            </p>
+            <p className="mt-2 break-words text-3xl font-black text-foreground sm:text-5xl">
               {sel
                 ? `${ISLAS.find((i) => i.id === sel.islaId)?.nombre ?? ""} · ${
                     TURNOS.find((t) => t.id === sel.turno)?.label ?? sel.turno

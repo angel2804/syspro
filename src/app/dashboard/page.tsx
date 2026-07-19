@@ -255,7 +255,7 @@ export default function DashboardPage() {
     setFinalizandoCierre(false);
     setConfirmandoCierre(false);
     setCurrentSesion(null);
-    router.push("/setup");
+    router.push("/setup?cambiarTrabajador=1");
   }
 
   // ---- Columnas compartidas (formulario inline + modal tabla) ----
@@ -279,11 +279,11 @@ export default function DashboardPage() {
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-green-700 shadow-md shadow-orange-900/40 ring-1 ring-white/20">
               <Fuel className="h-4 w-4 text-white" />
             </span>
-            <span className="text-base font-bold tracking-tight">{isla.nombre}</span>
+            <span className="text-lg font-black tracking-tight sm:text-2xl">{isla.nombre}</span>
             <Badge className="bg-primary text-primary-foreground hover:bg-primary">
               {turnoLabel(sesion.turno)}
             </Badge>
-            <Badge variant="secondary" className="bg-white/10 text-white hover:bg-white/15">
+            <Badge variant="secondary" className="bg-white/10 px-3 py-1.5 text-base font-black text-white hover:bg-white/15 sm:text-xl">
               {auth.rol !== "trabajador" ? auth.nombre : auth.trabajador}
             </Badge>
           </div>
